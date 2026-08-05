@@ -1,0 +1,19 @@
+services:
+  jira-tracker:
+    build: .
+    restart: unless-stopped
+    ports:
+      - '${PORT:-3000}:3000'
+    environment:
+      # El puerto interno es fijo; el de afuera se mapea arriba.
+      PORT: 3000
+      DATABASE_PATH: /data/jira-tracker.sqlite
+      JIRA_WEBHOOK_SECRET: ${JIRA_WEBHOOK_SECRET:?falta JIRA_WEBHOOK_SECRET}
+      LOG_WEBHOOK_BODY: ${LOG_WEBHOOK_BODY:-true}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    volumes:
+      # Sin esto se pierde la base en cada deploy.
+      - jira-tracker-data:/data
+
+volumes:
+  jira-tracker-data:

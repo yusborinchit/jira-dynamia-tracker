@@ -1,0 +1,42 @@
+{
+  "name": "jira-tracker",
+  "version": "1.0.0",
+  "description": "Registra el tiempo que cada issue de Jira pasa en cada estado, a partir de webhooks",
+  "type": "module",
+  "main": "dist/server.js",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsup src/server.ts --format esm --target node22 --clean",
+    "start": "node dist/server.js",
+    "db:push": "drizzle-kit push",
+    "db:mapping": "tsx src/db/load-status-mapping.ts",
+    "db:studio": "drizzle-kit studio",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.33.0",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "better-sqlite3",
+      "esbuild"
+    ]
+  },
+  "dependencies": {
+    "@t3-oss/env-core": "^0.13.11",
+    "better-sqlite3": "^13.0.3",
+    "dotenv": "^17.4.2",
+    "drizzle-orm": "^0.45.2",
+    "fastify": "^5.11.2",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/node": "^26.1.2",
+    "drizzle-kit": "^0.31.10",
+    "tsup": "^8.5.1",
+    "tsx": "^4.23.7",
+    "typescript": "^7.0.2"
+  }
+}
