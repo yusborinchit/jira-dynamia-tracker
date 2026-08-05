@@ -10,6 +10,9 @@ export interface MonthlySegment {
   category: string;
   entered_at: string;
   left_at: string | null;
+  /** Bordes ya recortados al mes del reporte: es lo que se dibuja en el Gantt. */
+  clipped_from: string;
+  clipped_to: string;
   open: boolean;
   terminal: boolean;
   seconds: number;
@@ -73,6 +76,8 @@ export function buildMonthlyReport(month: string, now = Date.now()): MonthlyRepo
       category,
       entered_at: toIso(row.enteredAt)!,
       left_at: toIso(row.leftAt),
+      clipped_from: toIso(clipped.from)!,
+      clipped_to: toIso(clipped.to)!,
       open: row.leftAt === null,
       terminal,
       seconds,

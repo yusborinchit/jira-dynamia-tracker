@@ -3,12 +3,14 @@ import { z } from 'zod';
 
 import { buildMonthlyReport } from '@/services/report.service';
 import { currentMonth } from '@/utils/time';
+import { renderMonthlyReportHtml } from '@/views/monthly-report.view';
 
 const monthlyQuerySchema = z.object({
   month: z
     .string()
     .regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'se espera YYYY-MM')
     .optional(),
+  format: z.enum(['json', 'html']).default('json'),
 });
 
 export async function reportRoutes(app: FastifyInstance): Promise<void> {
@@ -19,6 +21,12 @@ export async function reportRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const month = parsed.data.month ?? currentMonth();
-    return reply.send(buildMonthlyReport(month));
+    const report = buildMonthlyReport(month);
+
+    if (parsed.data.format === 'html') {
+      return reply.type('text/html; charset=utf-8').send(renderMonthlyReportHtml(report));
+    }
+
+    return reply.send(report);
   });
 }
