@@ -23,7 +23,8 @@ export function extractStatusTransition(payload: JiraWebhookPayload): StatusTran
     summary: issue.fields?.summary ?? null,
     fromStatusId: item.from ?? null,
     fromStatusName: item.fromString ?? null,
-    toStatusId: item.to ?? (issue.fields?.status?.id != null ? String(issue.fields.status.id) : null),
+    toStatusId:
+      item.to ?? (issue.fields?.status?.id != null ? String(issue.fields.status.id) : null),
     toStatusName,
     occurredAt: new Date(payload.timestamp ?? Date.now()),
   };

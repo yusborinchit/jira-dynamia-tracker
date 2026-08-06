@@ -23,7 +23,11 @@ function loadStatusMapping(): void {
 
       if (!current) {
         tx.insert(statusMapping)
-          .values({ jiraStatusId: null, jiraStatusName: entry.statusName, category: entry.category })
+          .values({
+            jiraStatusId: null,
+            jiraStatusName: entry.statusName,
+            category: entry.category,
+          })
           .run();
         inserted += 1;
         continue;
@@ -40,7 +44,7 @@ function loadStatusMapping(): void {
   });
 
   console.log(
-    `status_mapping: ${inserted} nuevos, ${updated} actualizados, ${STATUS_MAPPING_ENTRIES.length} estados en total`,
+    `status_mapping: ${inserted} inserted, ${updated} updated, ${STATUS_MAPPING_ENTRIES.length} entries total`,
   );
   sqlite.close();
 }

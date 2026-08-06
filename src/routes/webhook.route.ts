@@ -13,9 +13,9 @@ function serializeBody(body: unknown): string {
   try {
     const raw = typeof body === 'string' ? body : JSON.stringify(body);
     if (raw == null) return String(body);
-    return raw.length > MAX_LOGGED_BODY ? `${raw.slice(0, MAX_LOGGED_BODY)}… [truncado]` : raw;
+    return raw.length > MAX_LOGGED_BODY ? `${raw.slice(0, MAX_LOGGED_BODY)}… [truncated]` : raw;
   } catch {
-    return '[no serializable]';
+    return '[unserializable]';
   }
 }
 
@@ -42,7 +42,7 @@ export async function webhookRoutes(app: FastifyInstance): Promise<void> {
           bodyBytes: request.headers['content-length'] ?? null,
           body: serializeBody(request.body),
         },
-        'webhook recibido',
+        'webhook received',
       );
     }
 
@@ -52,7 +52,7 @@ export async function webhookRoutes(app: FastifyInstance): Promise<void> {
 
     const parsed = jiraWebhookSchema.safeParse(request.body);
     if (!parsed.success) {
-      request.log.warn({ issues: parsed.error.issues }, 'payload de Jira inválido');
+      request.log.warn({ issues: parsed.error.issues }, 'invalid jira payload');
       return reply.code(400).send({ error: 'invalid_payload' });
     }
 
@@ -62,9 +62,10 @@ export async function webhookRoutes(app: FastifyInstance): Promise<void> {
         {
           issue: parsed.data.issue?.key ?? null,
           event: parsed.data.webhookEvent ?? null,
-          changedFields: parsed.data.changelog?.items?.map((item) => item.field ?? item.fieldId) ?? [],
+          changedFields:
+            parsed.data.changelog?.items?.map((item) => item.field ?? item.fieldId) ?? [],
         },
-        'evento sin cambio de estado, ignorado',
+        'event without status change, ignored',
       );
       return reply.send({ ignored: true });
     }
@@ -78,13 +79,13 @@ export async function webhookRoutes(app: FastifyInstance): Promise<void> {
           to: transition.toStatusName,
           applied: result.applied,
         },
-        'transición procesada',
+        'transition processed',
       );
       return reply.send(
         result.applied ? { ok: true, issue: transition.issueKey } : { ok: true, duplicate: true },
       );
     } catch (error) {
-      request.log.error({ err: error, issue: transition.issueKey }, 'error aplicando la transición');
+      request.log.error({ err: error, issue: transition.issueKey }, 'failed to apply transition');
       return reply.send({ ok: false });
     }
   });

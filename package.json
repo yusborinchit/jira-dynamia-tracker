@@ -1,29 +1,29 @@
 {
   "name": "jira-tracker",
   "version": "1.0.0",
-  "description": "Registra el tiempo que cada issue de Jira pasa en cada estado, a partir de webhooks",
+  "description": "Tracks how long each Jira issue spends in each status, from webhooks",
   "type": "module",
   "main": "dist/server.js",
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "build": "tsup src/server.ts --format esm --target node22 --clean",
+    "dev:web": "pnpm --filter @jira-tracker/web dev",
+    "build": "pnpm build:web && pnpm build:server",
+    "build:server": "tsup src/server.ts --format esm --target node22 --clean",
+    "build:web": "pnpm --filter @jira-tracker/web build",
     "start": "node dist/server.js",
     "db:push": "drizzle-kit push",
     "db:mapping": "tsx src/db/load-status-mapping.ts",
     "db:studio": "drizzle-kit studio",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit && pnpm --filter @jira-tracker/web typecheck",
+    "lint": "biome check src web/src",
+    "format": "biome check --write src web/src"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "packageManager": "pnpm@10.33.0",
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "better-sqlite3",
-      "esbuild"
-    ]
-  },
   "dependencies": {
+    "@fastify/static": "^10.1.2",
     "@t3-oss/env-core": "^0.13.11",
     "better-sqlite3": "^13.0.3",
     "dotenv": "^17.4.2",
@@ -32,6 +32,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.5.7",
     "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^26.1.2",
     "drizzle-kit": "^0.31.10",

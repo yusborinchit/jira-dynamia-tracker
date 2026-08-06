@@ -1,10 +1,13 @@
 import { and, asc, eq, gt, isNull, lt, sql } from 'drizzle-orm';
 
-import { db, type DbClient } from '@/db/db';
-import { statusHistory, type StatusHistoryRow } from '@/db/schema';
+import { type DbClient, db } from '@/db/db';
+import { type StatusHistoryRow, statusHistory } from '@/db/schema';
 import type { Range } from '@/utils/time';
 
-export function findOpenSegment(issueKey: string, client: DbClient = db): StatusHistoryRow | undefined {
+export function findOpenSegment(
+  issueKey: string,
+  client: DbClient = db,
+): StatusHistoryRow | undefined {
   return client
     .select()
     .from(statusHistory)
@@ -19,7 +22,11 @@ export function closeSegment(
   durationSeconds: number,
   client: DbClient = db,
 ): void {
-  client.update(statusHistory).set({ leftAt, durationSeconds }).where(eq(statusHistory.id, id)).run();
+  client
+    .update(statusHistory)
+    .set({ leftAt, durationSeconds })
+    .where(eq(statusHistory.id, id))
+    .run();
 }
 
 export interface OpenSegmentInput {

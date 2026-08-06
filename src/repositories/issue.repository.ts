@@ -1,7 +1,7 @@
 import { eq, inArray } from 'drizzle-orm';
 
-import { db, type DbClient } from '@/db/db';
-import { issues, type Issue } from '@/db/schema';
+import { type DbClient, db } from '@/db/db';
+import { type Issue, issues } from '@/db/schema';
 
 export interface UpsertIssueInput {
   jiraIssueId: string;

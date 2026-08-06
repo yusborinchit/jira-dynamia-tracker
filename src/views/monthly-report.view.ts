@@ -1,5 +1,6 @@
 import { CATEGORY_COLORS, categoryColor } from '@/db/status-mapping.data';
 import type { MonthlyIssue, MonthlyReport, MonthlySegment } from '@/services/report.service';
+import { WORK_SHIFTS } from '@/utils/business-hours';
 import { dayStartsInRange, formatDuration, REPORT_TIMEZONE, wallClockIn } from '@/utils/time';
 
 const MONTH_TITLE_FMT = new Intl.DateTimeFormat('es-UY', {
@@ -29,12 +30,21 @@ const WEEKDAY_INITIAL: Record<string, string> = {
   Sun: 'D',
 };
 
-/** "agosto de 2026" → "Agosto de 2026". `text-transform: capitalize` capitalizaría también el "de". */
+const TINY_SEGMENT_PCT = 0.2;
+
+function pad2(value: number): string {
+  return String(value).padStart(2, '0');
+}
+
+const WORK_SCHEDULE_LABEL = WORK_SHIFTS.map(
+  (shift) =>
+    `${pad2(shift.startHour)}:${pad2(shift.startMinute)}–${pad2(shift.endHour)}:${pad2(shift.endMinute)}`,
+).join(' y ');
+
 function capitalizeFirst(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
-/** "waiting_info" → "Waiting info" */
 function categoryLabel(category: string): string {
   return capitalizeFirst(category.replace(/_/g, ' '));
 }
@@ -53,7 +63,6 @@ function isWeekend(utcMs: number): boolean {
   return weekday === 'Sat' || weekday === 'Sun';
 }
 
-/** Orden estable: primero las categorías conocidas, después las que aparezcan (uncategorized). */
 function orderedCategories(totals: Record<string, number>): string[] {
   const known = Object.keys(CATEGORY_COLORS).filter((category) => totals[category]);
   const extra = Object.keys(totals)
@@ -61,9 +70,6 @@ function orderedCategories(totals: Record<string, number>): string[] {
     .sort();
   return [...known, ...extra];
 }
-
-/** Por debajo de este ancho (~0.2% del mes, poco más de una hora) la barra depende de `min-width`. */
-const TINY_SEGMENT_PCT = 0.2;
 
 interface Axis {
   from: number;
@@ -76,29 +82,57 @@ function pct(value: number, axis: Axis): number {
   return ((value - axis.from) / axis.span) * 100;
 }
 
-function renderSegment(segment: MonthlySegment, axis: Axis): string {
-  const from = Date.parse(segment.clipped_from);
-  const to = Date.parse(segment.clipped_to);
+function renderBar(
+  from: number,
+  to: number,
+  segment: MonthlySegment,
+  axis: Axis,
+  tooltip: string,
+  isLast: boolean,
+): string {
   const left = Math.max(0, pct(from, axis));
   const width = Math.max(0, pct(to, axis) - left);
-
-  const duration = segment.terminal ? 'terminal' : formatDuration(segment.seconds);
-  const tooltip = `${segment.status_name} · ${segment.category} · ${duration}`;
-
-  // Un segmento de segundos ocupa un ancho ínfimo y `min-width` lo ensancha hacia la derecha,
-  // así que el segmento siguiente —que se dibuja después— lo taparía. Se eleva para que se vea.
   const tiny = width < TINY_SEGMENT_PCT;
 
   const classes = [
     'bar',
     segment.terminal ? 'terminal' : '',
-    segment.open ? 'open' : '',
+    segment.open && isLast ? 'open' : '',
     tiny ? 'tiny' : '',
   ]
     .filter(Boolean)
     .join(' ');
 
   return `<div class="${classes}" style="left:${left.toFixed(4)}%;width:${width.toFixed(4)}%;background:${categoryColor(segment.category)}" title="${escapeHtml(tooltip)}"></div>`;
+}
+
+function renderSegment(segment: MonthlySegment, axis: Axis): string {
+  const duration = segment.terminal ? 'terminal' : formatDuration(segment.seconds);
+  const tooltip = `${segment.status_name} · ${segment.category} · ${duration}`;
+
+  if (segment.terminal || segment.work_intervals.length === 0) {
+    return renderBar(
+      Date.parse(segment.clipped_from),
+      Date.parse(segment.clipped_to),
+      segment,
+      axis,
+      tooltip,
+      true,
+    );
+  }
+
+  return segment.work_intervals
+    .map((interval, index) =>
+      renderBar(
+        Date.parse(interval.from),
+        Date.parse(interval.to),
+        segment,
+        axis,
+        tooltip,
+        index === segment.work_intervals.length - 1,
+      ),
+    )
+    .join('');
 }
 
 function renderGridCells(axis: Axis): string {
@@ -218,7 +252,12 @@ export function renderMonthlyReportHtml(report: MonthlyReport): string {
   const from = Date.parse(report.from);
   const to = Date.parse(report.to);
   const generatedAt = Date.parse(report.generated_at);
-  const axis: Axis = { from, to, span: Math.max(1, to - from), days: dayStartsInRange({ from, to }) };
+  const axis: Axis = {
+    from,
+    to,
+    span: Math.max(1, to - from),
+    days: dayStartsInRange({ from, to }),
+  };
 
   const total = Object.values(report.totals_by_category).reduce((acc, value) => acc + value, 0);
   const projectCount = Object.keys(report.totals_by_project).length;
@@ -279,7 +318,6 @@ export function renderMonthlyReportHtml(report: MonthlyReport): string {
   .legend-value { color: #64748b; font-variant-numeric: tabular-nums; }
   .swatch { width: 10px; height: 10px; border-radius: 2px; flex: none; }
 
-  /* --- Gantt --- */
   .gantt { margin-top: 18px; }
   .row { display: flex; align-items: stretch; break-inside: avoid; page-break-inside: avoid; }
   .row-label { width: 210px; flex: none; padding: 5px 10px 5px 0; display: flex; flex-direction: column; overflow: hidden; }
@@ -294,7 +332,7 @@ export function renderMonthlyReportHtml(report: MonthlyReport): string {
 
   .bar {
     position: absolute; top: 8px; height: 14px;
-    min-width: 3px; border-radius: 3px;
+    min-width: 2px; border-radius: 2px;
   }
   .bar.open { border-right: 2px solid #0f172a; }
   .bar.tiny { z-index: 2; box-shadow: 0 0 0 0.5px rgba(255,255,255,0.9); }
@@ -314,7 +352,6 @@ export function renderMonthlyReportHtml(report: MonthlyReport): string {
   .row.axis .dnum { font-variant-numeric: tabular-nums; }
   .row.axis .dwd { font-size: 7px; opacity: 0.65; }
 
-  /* --- Tablas --- */
   table { width: 100%; border-collapse: collapse; font-size: 12px; }
   thead { display: table-header-group; }
   th { text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em;
@@ -341,7 +378,7 @@ export function renderMonthlyReportHtml(report: MonthlyReport): string {
     Generado ${escapeHtml(DATETIME_FMT.format(new Date(generatedAt)))} · zona horaria ${escapeHtml(REPORT_TIMEZONE)}
   </div>
   <div class="kpis">
-    <div class="kpi"><div class="value">${formatDuration(total)}</div><div class="label">Tiempo trackeado</div></div>
+    <div class="kpi"><div class="value">${formatDuration(total)}</div><div class="label">Horas hábiles trackeadas</div></div>
     <div class="kpi"><div class="value">${report.issues.length}</div><div class="label">Issues</div></div>
     <div class="kpi"><div class="value">${projectCount}</div><div class="label">Proyectos</div></div>
   </div>
@@ -352,6 +389,8 @@ export function renderMonthlyReportHtml(report: MonthlyReport): string {
 ${body}
 
 <footer>
+  Solo se cuenta el tiempo dentro del horario laboral: lunes a viernes, ${escapeHtml(WORK_SCHEDULE_LABEL)}.
+  Las noches, los fines de semana y la hora de almuerzo no suman.
   Las barras con borde derecho marcado siguen abiertas al momento de generar el reporte.
   Los estados sin categoría asignada aparecen en rosa.
 </footer>

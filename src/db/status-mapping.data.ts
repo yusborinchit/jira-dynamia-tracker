@@ -11,11 +11,6 @@ export type Category = keyof typeof STATUS_CATEGORIES;
 
 export const UNCATEGORIZED_COLOR = '#ec4899';
 
-/**
- * Colores del reporte. Elegidos con luminosidad bien distinta entre sí para que el Gantt
- * siga siendo legible impreso en blanco y negro. `uncategorized` es deliberadamente
- * estridente: marca estados de Jira que faltan mapear acá.
- */
 export const CATEGORY_COLORS: Record<Category, string> = {
   pending: '#94a3b8',
   waiting_info: '#f59e0b',
@@ -40,6 +35,8 @@ export interface StatusMappingEntry {
   category: Category;
 }
 
-export const STATUS_MAPPING_ENTRIES: StatusMappingEntry[] = Object.entries(STATUS_CATEGORIES).flatMap(
-  ([category, names]) => names.map((statusName) => ({ statusName, category: category as Category })),
+export const STATUS_MAPPING_ENTRIES: StatusMappingEntry[] = Object.entries(
+  STATUS_CATEGORIES,
+).flatMap(([category, names]) =>
+  names.map((statusName) => ({ statusName, category: category as Category })),
 );

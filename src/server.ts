@@ -5,6 +5,7 @@ import { sqlite } from '@/db/db';
 import { env } from '@/env';
 import { healthRoutes } from '@/routes/health.route';
 import { reportRoutes } from '@/routes/report.route';
+import { webRoutes } from '@/routes/web.route';
 import { webhookRoutes } from '@/routes/webhook.route';
 
 export function buildServer() {
@@ -16,6 +17,7 @@ export function buildServer() {
   app.register(healthRoutes);
   app.register(webhookRoutes);
   app.register(reportRoutes);
+  app.register(webRoutes);
 
   return app;
 }
@@ -24,7 +26,7 @@ async function main(): Promise<void> {
   const app = buildServer();
 
   const shutdown = async (signal: string): Promise<void> => {
-    app.log.info({ signal }, 'cerrando');
+    app.log.info({ signal }, 'shutting down');
     await app.close();
     sqlite.close();
     process.exit(0);

@@ -1,5 +1,5 @@
-import { db, type DbClient } from '@/db/db';
-import { statusMapping, statuses, type StatusMappingRow } from '@/db/schema';
+import { type DbClient, db } from '@/db/db';
+import { type StatusMappingRow, statuses, statusMapping } from '@/db/schema';
 
 export interface UpsertStatusInput {
   statusId: string;
@@ -36,7 +36,8 @@ export class CategoryResolver {
   constructor(rows: StatusMappingRow[]) {
     for (const row of rows) {
       if (row.jiraStatusId) this.byId.set(row.jiraStatusId, row.category);
-      if (row.jiraStatusName) this.byName.set(normalizeStatusName(row.jiraStatusName), row.category);
+      if (row.jiraStatusName)
+        this.byName.set(normalizeStatusName(row.jiraStatusName), row.category);
     }
   }
 

@@ -1,9 +1,5 @@
 import { db } from '@/db/db';
-import {
-  closeSegment,
-  findOpenSegment,
-  openSegment,
-} from '@/repositories/history.repository';
+import { closeSegment, findOpenSegment, openSegment } from '@/repositories/history.repository';
 import { upsertIssue } from '@/repositories/issue.repository';
 import { loadCategoryResolver, upsertStatus } from '@/repositories/status.repository';
 import type { StatusTransition } from '@/types/jira';

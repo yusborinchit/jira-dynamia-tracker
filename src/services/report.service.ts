@@ -1,8 +1,26 @@
-import { isTerminalCategory } from '@/db/status-mapping.data';
+import { CATEGORY_COLORS, isTerminalCategory, UNCATEGORIZED_COLOR } from '@/db/status-mapping.data';
 import { findSegmentsOverlapping } from '@/repositories/history.repository';
 import { listIssuesByKeys } from '@/repositories/issue.repository';
 import { loadCategoryResolver, UNCATEGORIZED } from '@/repositories/status.repository';
-import { clipToRange, monthRange, toIso } from '@/utils/time';
+import {
+  intersectWorkIntervals,
+  secondsOf,
+  WORK_DAYS,
+  WORK_SHIFTS,
+  workIntervalsInRange,
+} from '@/utils/business-hours';
+import { clipToRange, monthRange, type Range, REPORT_TIMEZONE, toIso } from '@/utils/time';
+
+export interface WorkSchedule {
+  timezone: string;
+  days: number[];
+  shifts: string[];
+}
+
+export interface WorkInterval {
+  from: string;
+  to: string;
+}
 
 export interface MonthlySegment {
   status_id: string | null;
@@ -10,9 +28,9 @@ export interface MonthlySegment {
   category: string;
   entered_at: string;
   left_at: string | null;
-  /** Bordes ya recortados al mes del reporte: es lo que se dibuja en el Gantt. */
   clipped_from: string;
   clipped_to: string;
+  work_intervals: WorkInterval[];
   open: boolean;
   terminal: boolean;
   seconds: number;
@@ -28,18 +46,43 @@ export interface MonthlyIssue {
   segments: MonthlySegment[];
 }
 
-export interface MonthlyReport {
-  month: string;
+export interface Report {
   from: string;
   to: string;
   generated_at: string;
   issues: MonthlyIssue[];
   totals_by_category: Record<string, number>;
   totals_by_project: Record<string, number>;
+  category_colors: Record<string, string>;
+  work_schedule: WorkSchedule;
+  work_intervals: WorkInterval[];
+}
+
+export interface MonthlyReport extends Report {
+  month: string;
+}
+
+function pad2(value: number): string {
+  return String(value).padStart(2, '0');
+}
+
+function describeWorkSchedule(): WorkSchedule {
+  return {
+    timezone: REPORT_TIMEZONE,
+    days: [...WORK_DAYS].sort((a, b) => a - b),
+    shifts: WORK_SHIFTS.map(
+      (shift) =>
+        `${pad2(shift.startHour)}:${pad2(shift.startMinute)}-${pad2(shift.endHour)}:${pad2(shift.endMinute)}`,
+    ),
+  };
 }
 
 export function buildMonthlyReport(month: string, now = Date.now()): MonthlyReport {
-  const range = monthRange(month);
+  return { month, ...buildReport(monthRange(month), now) };
+}
+
+export function buildReport(range: Range, now = Date.now()): Report {
+  const workIntervals = workIntervalsInRange(range);
   const resolver = loadCategoryResolver();
   const rows = findSegmentsOverlapping(range, now);
 
@@ -54,7 +97,8 @@ export function buildMonthlyReport(month: string, now = Date.now()): MonthlyRepo
 
     const category = resolver.resolve(row.statusId, row.statusName) ?? UNCATEGORIZED;
     const terminal = isTerminalCategory(category);
-    const seconds = terminal ? 0 : Math.round((clipped.to - clipped.from) / 1000);
+    const worked = terminal ? [] : intersectWorkIntervals(clipped, workIntervals);
+    const seconds = secondsOf(worked);
 
     let issue = byIssue.get(row.issueKey);
     if (!issue) {
@@ -78,6 +122,10 @@ export function buildMonthlyReport(month: string, now = Date.now()): MonthlyRepo
       left_at: toIso(row.leftAt),
       clipped_from: toIso(clipped.from)!,
       clipped_to: toIso(clipped.to)!,
+      work_intervals: worked.map((interval) => ({
+        from: toIso(interval.from)!,
+        to: toIso(interval.to)!,
+      })),
       open: row.leftAt === null,
       terminal,
       seconds,
@@ -109,12 +157,17 @@ export function buildMonthlyReport(month: string, now = Date.now()): MonthlyRepo
   }
 
   return {
-    month,
     from: new Date(range.from).toISOString(),
     to: new Date(range.to).toISOString(),
     generated_at: new Date(now).toISOString(),
     issues,
     totals_by_category: totalsByCategory,
     totals_by_project: totalsByProject,
+    category_colors: { ...CATEGORY_COLORS, [UNCATEGORIZED]: UNCATEGORIZED_COLOR },
+    work_schedule: describeWorkSchedule(),
+    work_intervals: workIntervals.map((interval) => ({
+      from: toIso(interval.from)!,
+      to: toIso(interval.to)!,
+    })),
   };
 }

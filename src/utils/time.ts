@@ -4,6 +4,7 @@ export interface Range {
 }
 
 const MONTH_RE = /^(\d{4})-(\d{2})$/;
+const DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
 
 export const REPORT_TIMEZONE = 'America/Montevideo';
 
@@ -36,7 +37,6 @@ interface WallClock {
   second: number;
 }
 
-/** Descompone un instante UTC en la hora de pared de `tz`. */
 export function wallClockIn(utcMs: number, tz: string = REPORT_TIMEZONE): WallClock {
   const parts = partsFormatter(tz).formatToParts(new Date(utcMs));
   const read = (type: Intl.DateTimeFormatPartTypes): number =>
@@ -52,18 +52,12 @@ export function wallClockIn(utcMs: number, tz: string = REPORT_TIMEZONE): WallCl
   };
 }
 
-/** Offset de `tz` respecto de UTC en ese instante, en ms (negativo al oeste de Greenwich). */
 function tzOffsetMs(utcMs: number, tz: string): number {
   const wall = wallClockIn(utcMs, tz);
   const asUtc = Date.UTC(wall.year, wall.month - 1, wall.day, wall.hour, wall.minute, wall.second);
   return asUtc - utcMs;
 }
 
-/**
- * Instante UTC correspondiente a una hora de pared en `tz`. El offset se aplica dos veces
- * porque el primer cálculo usa un instante aproximado: en un borde de DST el offset correcto
- * puede ser el del otro lado del salto.
- */
 export function zonedTimeToUtc(
   year: number,
   monthIndex: number,
@@ -73,17 +67,17 @@ export function zonedTimeToUtc(
   tz: string = REPORT_TIMEZONE,
 ): number {
   const guess = Date.UTC(year, monthIndex, day, hour, minute);
-  const utc = guess - tzOffsetMs(guess, tz);
-  return guess - tzOffsetMs(utc, tz);
+  const approximate = guess - tzOffsetMs(guess, tz);
+  return guess - tzOffsetMs(approximate, tz);
 }
 
 export function monthRange(month: string, tz: string = REPORT_TIMEZONE): Range {
   const match = MONTH_RE.exec(month);
-  if (!match) throw new Error(`Mes inválido: ${month} (se espera YYYY-MM)`);
+  if (!match) throw new Error(`Invalid month: ${month} (expected YYYY-MM)`);
 
   const year = Number(match[1]);
   const monthIndex = Number(match[2]) - 1;
-  if (monthIndex < 0 || monthIndex > 11) throw new Error(`Mes inválido: ${month}`);
+  if (monthIndex < 0 || monthIndex > 11) throw new Error(`Invalid month: ${month}`);
 
   return {
     from: zonedTimeToUtc(year, monthIndex, 1, 0, 0, tz),
@@ -96,13 +90,43 @@ export function currentMonth(now = new Date(), tz: string = REPORT_TIMEZONE): st
   return `${wall.year}-${String(wall.month).padStart(2, '0')}`;
 }
 
-/** Inicio de cada día del rango, en ms UTC. Alimenta el eje X y la grilla del Gantt. */
+export function currentDate(now = new Date(), tz: string = REPORT_TIMEZONE): string {
+  const wall = wallClockIn(now.getTime(), tz);
+  return `${wall.year}-${String(wall.month).padStart(2, '0')}-${String(wall.day).padStart(2, '0')}`;
+}
+
+function parseDate(date: string): { year: number; monthIndex: number; day: number } {
+  const match = DATE_RE.exec(date);
+  if (!match) throw new Error(`Invalid date: ${date} (expected YYYY-MM-DD)`);
+  return {
+    year: Number(match[1]),
+    monthIndex: Number(match[2]) - 1,
+    day: Number(match[3]),
+  };
+}
+
+export function dayRange(date: string, tz: string = REPORT_TIMEZONE): Range {
+  const { year, monthIndex, day } = parseDate(date);
+  return {
+    from: zonedTimeToUtc(year, monthIndex, day, 0, 0, tz),
+    to: zonedTimeToUtc(year, monthIndex, day + 1, 0, 0, tz),
+  };
+}
+
+export function monthRangeForDate(date: string, tz: string = REPORT_TIMEZONE): Range {
+  const { year, monthIndex } = parseDate(date);
+  return {
+    from: zonedTimeToUtc(year, monthIndex, 1, 0, 0, tz),
+    to: zonedTimeToUtc(year, monthIndex + 1, 1, 0, 0, tz),
+  };
+}
+
 export function dayStartsInRange(range: Range, tz: string = REPORT_TIMEZONE): number[] {
   const first = wallClockIn(range.from, tz);
   const days: number[] = [];
 
-  for (let day = 1; day <= 31; day += 1) {
-    const start = zonedTimeToUtc(first.year, first.month - 1, day, 0, 0, tz);
+  for (let offset = 0; offset < 40; offset += 1) {
+    const start = zonedTimeToUtc(first.year, first.month - 1, first.day + offset, 0, 0, tz);
     if (start >= range.to) break;
     days.push(start);
   }
@@ -110,7 +134,7 @@ export function dayStartsInRange(range: Range, tz: string = REPORT_TIMEZONE): nu
   return days;
 }
 
-export function clipToRange(start: number, end: number, range: Range): { from: number; to: number } | null {
+export function clipToRange(start: number, end: number, range: Range): Range | null {
   const from = Math.max(start, range.from);
   const to = Math.min(end, range.to);
   return to > from ? { from, to } : null;
@@ -121,16 +145,13 @@ export function toIso(value: Date | number | null): string | null {
   return new Date(value).toISOString();
 }
 
-/** `94 → "1m 34s"`, `183600 → "2d 3h"`. Se muestran como mucho dos unidades. */
 export function formatDuration(seconds: number): string {
   if (seconds <= 0) return '0s';
 
-  const days = Math.floor(seconds / 86_400);
-  const hours = Math.floor((seconds % 86_400) / 3_600);
+  const hours = Math.floor(seconds / 3_600);
   const minutes = Math.floor((seconds % 3_600) / 60);
   const secs = seconds % 60;
 
-  if (days > 0) return hours > 0 ? `${days}d ${hours}h` : `${days}d`;
   if (hours > 0) return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
   if (minutes > 0) return secs > 0 ? `${minutes}m ${secs}s` : `${minutes}m`;
   return `${secs}s`;
