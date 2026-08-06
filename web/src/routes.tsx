@@ -78,7 +78,8 @@ function Dashboard() {
     });
   };
 
-  const filtered = data ? applyFilters(data, filters) : undefined;
+  const view = data ? applyFilters(data, filters) : undefined;
+  const highlight = isFiltered(filters) ? view?.matches : undefined;
 
   return (
     <div className="mx-auto flex max-w-[1400px] flex-col gap-6 p-6">
@@ -109,15 +110,13 @@ function Dashboard() {
         </p>
       )}
 
-      {data && filtered && (
+      {data && view && (
         <>
-          <Summary report={filtered} />
+          <Summary report={view.report} issueCount={view.matchedIssues} />
 
-          {filtered.issues.length === 0 ? (
+          {view.report.issues.length === 0 ? (
             <p className="py-16 text-center text-slate-500">
-              {isFiltered(filters)
-                ? 'Ningún issue coincide con el filtro.'
-                : 'No hay actividad registrada en este período.'}
+              No hay actividad registrada en este período.
             </p>
           ) : (
             <>
@@ -126,11 +125,17 @@ function Dashboard() {
                   {TIMELINE_TITLE[span]}
                 </h2>
                 <TimelineLegend report={data} span={span} />
+                {view.matchedIssues === 0 && (
+                  <p className="pb-2 text-xs text-slate-500">
+                    Ningún issue coincide con el filtro; se muestra todo atenuado.
+                  </p>
+                )}
                 {span === 'day' ? (
-                  <DayView report={filtered} />
+                  <DayView report={view.report} matches={highlight} />
                 ) : (
                   <Gantt
-                    report={filtered}
+                    report={view.report}
+                    matches={highlight}
                     onSelectIssue={(issueKey) => update({ search: issueKey })}
                   />
                 )}
@@ -138,7 +143,7 @@ function Dashboard() {
 
               <section>
                 <h2 className="mb-2 text-sm font-semibold tracking-tight">Detalle por issue</h2>
-                <IssueTable report={filtered} />
+                <IssueTable report={view.report} matches={highlight} />
               </section>
             </>
           )}

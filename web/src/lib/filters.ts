@@ -8,6 +8,14 @@ export interface ReportFilters {
 
 export const EMPTY_FILTERS: ReportFilters = { projects: [], categories: [], search: '' };
 
+export type MatchFn = (issueKey: string, category?: string) => boolean;
+
+export interface FilteredReport {
+  report: MonthlyReport;
+  matches: MatchFn;
+  matchedIssues: number;
+}
+
 function matchesSearch(issue: Issue, search: string): boolean {
   if (!search) return true;
   const needle = search.toLowerCase();
@@ -18,51 +26,47 @@ function matchesSearch(issue: Issue, search: string): boolean {
   );
 }
 
-export function applyFilters(report: MonthlyReport, filters: ReportFilters): MonthlyReport {
+export function applyFilters(report: MonthlyReport, filters: ReportFilters): FilteredReport {
   const projects = new Set(filters.projects);
   const categories = new Set(filters.categories);
 
-  const issues: Issue[] = [];
+  const matchesCategory = (category: string): boolean =>
+    categories.size === 0 || categories.has(category);
+
+  const matched = new Set<string>();
 
   for (const issue of report.issues) {
-    const project = issue.project_key || 'unknown';
-    if (projects.size > 0 && !projects.has(project)) continue;
+    if (projects.size > 0 && !projects.has(issue.project_key || 'unknown')) continue;
     if (!matchesSearch(issue, filters.search)) continue;
-
-    const segments =
-      categories.size > 0
-        ? issue.segments.filter((segment) => categories.has(segment.category))
-        : issue.segments;
-
-    const kept = segments.filter((segment) => !segment.terminal);
-    if (kept.length === 0) continue;
-
-    const byCategory: Record<string, number> = {};
-    let total = 0;
-    for (const segment of kept) {
-      byCategory[segment.category] = (byCategory[segment.category] ?? 0) + segment.seconds;
-      total += segment.seconds;
+    if (!issue.segments.some((segment) => !segment.terminal && matchesCategory(segment.category))) {
+      continue;
     }
-
-    issues.push({ ...issue, segments, by_category: byCategory, total_seconds: total });
+    matched.add(issue.issue_key);
   }
 
   const totalsByCategory: Record<string, number> = {};
   const totalsByProject: Record<string, number> = {};
 
-  for (const issue of issues) {
-    for (const [category, seconds] of Object.entries(issue.by_category)) {
-      totalsByCategory[category] = (totalsByCategory[category] ?? 0) + seconds;
-    }
+  for (const issue of report.issues) {
+    if (!matched.has(issue.issue_key)) continue;
     const project = issue.project_key || 'unknown';
-    totalsByProject[project] = (totalsByProject[project] ?? 0) + issue.total_seconds;
+
+    for (const [category, seconds] of Object.entries(issue.by_category)) {
+      if (!matchesCategory(category)) continue;
+      totalsByCategory[category] = (totalsByCategory[category] ?? 0) + seconds;
+      totalsByProject[project] = (totalsByProject[project] ?? 0) + seconds;
+    }
   }
 
   return {
-    ...report,
-    issues,
-    totals_by_category: totalsByCategory,
-    totals_by_project: totalsByProject,
+    report: {
+      ...report,
+      totals_by_category: totalsByCategory,
+      totals_by_project: totalsByProject,
+    },
+    matchedIssues: matched.size,
+    matches: (issueKey, category) =>
+      matched.has(issueKey) && (category === undefined || matchesCategory(category)),
   };
 }
 

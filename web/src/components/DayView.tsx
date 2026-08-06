@@ -1,3 +1,4 @@
+import type { MatchFn } from '@/lib/filters';
 import { categoryLabel, formatDuration, type MonthlyReport } from '@/lib/report';
 
 interface Block {
@@ -10,7 +11,6 @@ interface Block {
   open: boolean;
   isSegmentEnd: boolean;
   lane: number;
-  lanes: number;
 }
 
 function hourFraction(utcMs: number, timezone: string): number {
@@ -108,45 +108,43 @@ function projectHour(hour: number, axis: HourAxis): number {
   return last.startPct + last.widthPct;
 }
 
-function packIntoLanes(blocks: Omit<Block, 'lane' | 'lanes'>[]): Block[] {
-  const sorted = [...blocks].sort(
-    (a, b) => a.from - b.from || a.issueKey.localeCompare(b.issueKey),
-  );
-  const packed: Block[] = [];
-
-  let group: Block[] = [];
-  let groupEnd = Number.NEGATIVE_INFINITY;
-
-  const closeGroup = () => {
-    const lanes = group.reduce((max, block) => Math.max(max, block.lane + 1), 0);
-    for (const block of group) block.lanes = lanes;
-    packed.push(...group);
-    group = [];
-    groupEnd = Number.NEGATIVE_INFINITY;
-  };
-
-  for (const block of sorted) {
-    if (block.from >= groupEnd && group.length > 0) closeGroup();
-
-    const laneEnds: number[] = [];
-    for (const existing of group) {
-      laneEnds[existing.lane] = Math.max(laneEnds[existing.lane] ?? 0, existing.to);
-    }
-
-    let lane = 0;
-    while ((laneEnds[lane] ?? 0) > block.from) lane += 1;
-
-    group.push({ ...block, lane, lanes: 1 });
-    groupEnd = Math.max(groupEnd, block.to);
+function packIntoLanes(blocks: Omit<Block, 'lane'>[]): Block[] {
+  const byIssue = new Map<string, Omit<Block, 'lane'>[]>();
+  for (const block of blocks) {
+    const current = byIssue.get(block.issueKey);
+    if (current) current.push(block);
+    else byIssue.set(block.issueKey, [block]);
   }
 
-  if (group.length > 0) closeGroup();
+  const issues = [...byIssue.entries()]
+    .map(([issueKey, issueBlocks]) => ({
+      issueKey,
+      blocks: issueBlocks,
+      from: Math.min(...issueBlocks.map((block) => block.from)),
+    }))
+    .sort((a, b) => a.from - b.from || a.issueKey.localeCompare(b.issueKey));
+
+  const lanes: Omit<Block, 'lane'>[][] = [];
+  const packed: Block[] = [];
+
+  for (const issue of issues) {
+    const overlaps = (lane: Omit<Block, 'lane'>[]): boolean =>
+      lane.some((taken) => issue.blocks.some((own) => own.from < taken.to && taken.from < own.to));
+
+    let lane = 0;
+    while (overlaps(lanes[lane] ?? [])) lane += 1;
+
+    const target = lanes[lane];
+    if (target) target.push(...issue.blocks);
+    else lanes[lane] = [...issue.blocks];
+    packed.push(...issue.blocks.map((block) => ({ ...block, lane })));
+  }
 
   return packed;
 }
 
-function collectBlocks(report: MonthlyReport): Omit<Block, 'lane' | 'lanes'>[] {
-  const blocks: Omit<Block, 'lane' | 'lanes'>[] = [];
+function collectBlocks(report: MonthlyReport): Omit<Block, 'lane'>[] {
+  const blocks: Omit<Block, 'lane'>[] = [];
 
   for (const issue of report.issues) {
     for (const segment of issue.segments) {
@@ -170,9 +168,14 @@ function collectBlocks(report: MonthlyReport): Omit<Block, 'lane' | 'lanes'>[] {
 }
 
 const LANE_HEIGHT = 22;
+const MIN_BLOCK_PX = 16;
+const BLOCK_GAP_PX = 2;
+const DIMMED_OPACITY = 0.16;
 
-export function DayView({ report }: { report: MonthlyReport }) {
+export function DayView({ report, matches }: { report: MonthlyReport; matches?: MatchFn }) {
   const timezone = report.work_schedule.timezone;
+  const dimmed = (block: Block): boolean =>
+    matches !== undefined && !matches(block.issueKey, block.category);
   const axis = buildHourAxis(report.work_schedule.shifts);
   const start = axis.bands[0]?.startHour ?? 0;
   const end = axis.bands[axis.bands.length - 1]?.endHour ?? 24;
@@ -264,7 +267,7 @@ export function DayView({ report }: { report: MonthlyReport }) {
                     width: `${100 - from}%`,
                     top: block.lane * LANE_HEIGHT + (LANE_HEIGHT - 3) / 2,
                     borderColor: report.category_colors[block.category] ?? '#ec4899',
-                    opacity: 0.55,
+                    opacity: dimmed(block) ? DIMMED_OPACITY : 0.55,
                   }}
                 />
               );
@@ -273,15 +276,17 @@ export function DayView({ report }: { report: MonthlyReport }) {
           {blocks.map((block) => {
             const left = pct(hourFraction(block.from, timezone));
             const right = pct(hourFraction(block.to, timezone));
-            const width = Math.max(0.4, right - left);
+            const width = right - left;
 
             return (
               <div
                 key={`${block.issueKey}-${block.from}-${block.lane}`}
-                className="absolute flex items-center overflow-hidden rounded-sm px-1.5 text-[10px] leading-none text-white/95"
+                className="absolute flex items-center overflow-hidden rounded-sm px-1.5 text-[10px] leading-none text-white/95 transition-opacity"
                 style={{
+                  opacity: dimmed(block) ? DIMMED_OPACITY : 1,
                   left: `${left}%`,
-                  width: `max(4px, calc(${width}% - 2px))`,
+                  marginLeft: `min(0px, calc(${width}% - ${MIN_BLOCK_PX + BLOCK_GAP_PX}px))`,
+                  width: `max(${MIN_BLOCK_PX}px, calc(${width}% - ${BLOCK_GAP_PX}px))`,
                   top: block.lane * LANE_HEIGHT,
                   height: LANE_HEIGHT - 3,
                   background: report.category_colors[block.category] ?? '#ec4899',

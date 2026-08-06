@@ -7,10 +7,12 @@ import {
   projectIntervals,
   projectToAxis,
 } from '@/lib/axis';
+import type { MatchFn } from '@/lib/filters';
 import { formatDuration, type Issue, type MonthlyReport, type Segment } from '@/lib/report';
 
 const MIN_BAR_PX = 3;
 const BLOCK_GAP_PX = 2;
+const DIMMED_OPACITY = 0.16;
 
 function DayGrid({ axis }: { axis: CompressedAxis }) {
   return (
@@ -32,11 +34,13 @@ function SegmentBars({
   segment,
   axis,
   color,
+  dimmed,
   onSelect,
 }: {
   segment: Segment;
   axis: CompressedAxis;
   color: string;
+  dimmed: boolean;
   onSelect?: () => void;
 }) {
   if (segment.terminal || segment.work_intervals.length === 0) return null;
@@ -48,14 +52,16 @@ function SegmentBars({
     <>
       {projectIntervals(segment.work_intervals, axis).map((span) => {
         const classes = [
-          'absolute top-1.5 h-4 rounded-sm',
+          'absolute top-1.5 h-4 rounded-sm transition-opacity',
           onSelect ? 'cursor-pointer hover:brightness-110' : '',
         ]
           .filter(Boolean)
           .join(' ');
 
         const style = {
+          opacity: dimmed ? DIMMED_OPACITY : 1,
           left: `${span.left.toFixed(4)}%`,
+          marginLeft: `min(0px, calc(${span.width.toFixed(4)}% - ${MIN_BAR_PX + BLOCK_GAP_PX}px))`,
           width: `max(${MIN_BAR_PX}px, calc(${span.width.toFixed(4)}% - ${BLOCK_GAP_PX}px))`,
           background: color,
         };
@@ -68,7 +74,7 @@ function SegmentBars({
                 left: `${(span.left + span.width).toFixed(4)}%`,
                 width: `${(100 - span.left - span.width).toFixed(4)}%`,
                 borderColor: color,
-                opacity: 0.55,
+                opacity: dimmed ? DIMMED_OPACITY : 0.55,
               }}
               title={`${tooltip} · sigue abierto`}
             />
@@ -97,10 +103,11 @@ function SegmentBars({
 
 interface GanttProps {
   report: MonthlyReport;
+  matches?: MatchFn;
   onSelectIssue?: (issueKey: string) => void;
 }
 
-export function Gantt({ report, onSelectIssue }: GanttProps) {
+export function Gantt({ report, matches, onSelectIssue }: GanttProps) {
   const axis = buildCompressedAxis(report);
   const generatedAt = Date.parse(report.generated_at);
   const showNow = isOnAxis(generatedAt, axis);
@@ -134,7 +141,10 @@ export function Gantt({ report, onSelectIssue }: GanttProps) {
 
         {report.issues.map((issue: Issue) => (
           <div key={issue.issue_key} className="flex items-stretch">
-            <div className="flex w-52 flex-none flex-col overflow-hidden py-1.5 pr-2.5">
+            <div
+              className="flex w-52 flex-none flex-col overflow-hidden py-1.5 pr-2.5 transition-opacity"
+              style={{ opacity: matches && !matches(issue.issue_key) ? 0.35 : 1 }}
+            >
               <button
                 type="button"
                 className="truncate text-left font-mono text-[11px] font-semibold hover:underline"
@@ -155,6 +165,7 @@ export function Gantt({ report, onSelectIssue }: GanttProps) {
                     segment={segment}
                     axis={axis}
                     color={report.category_colors[segment.category] ?? '#ec4899'}
+                    dimmed={matches !== undefined && !matches(issue.issue_key, segment.category)}
                     onSelect={onSelectIssue ? () => onSelectIssue(issue.issue_key) : undefined}
                   />
                 ))}

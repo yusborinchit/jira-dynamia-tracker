@@ -3,7 +3,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 
 import { env } from '@/env';
 import { applyStatusTransition } from '@/services/issue.service';
-import { extractStatusTransition } from '@/services/webhook.service';
+import { interpretWebhook } from '@/services/webhook.service';
 import { jiraWebhookSchema } from '@/types/jira';
 
 const SECRET_HEADER = 'x-webhook-secret';
@@ -56,25 +56,29 @@ export async function webhookRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(400).send({ error: 'invalid_payload' });
     }
 
-    const transition = extractStatusTransition(parsed.data);
-    if (!transition) {
+    const outcome = interpretWebhook(parsed.data);
+    if (outcome.kind === 'ignored') {
       request.log.info(
         {
           issue: parsed.data.issue?.key ?? null,
-          event: parsed.data.webhookEvent ?? null,
+          event: outcome.event,
+          reason: outcome.reason,
           changedFields:
             parsed.data.changelog?.items?.map((item) => item.field ?? item.fieldId) ?? [],
         },
-        'event without status change, ignored',
+        'event ignored',
       );
-      return reply.send({ ignored: true });
+      return reply.send({ ignored: true, reason: outcome.reason });
     }
+
+    const transition = outcome.transition;
 
     try {
       const result = applyStatusTransition(transition);
       request.log.info(
         {
           issue: transition.issueKey,
+          event: outcome.event,
           from: transition.fromStatusName,
           to: transition.toStatusName,
           applied: result.applied,

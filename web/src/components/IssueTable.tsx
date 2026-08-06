@@ -8,6 +8,7 @@ import {
 } from '@tanstack/react-table';
 import { useMemo, useState } from 'react';
 
+import type { MatchFn } from '@/lib/filters';
 import { categoryLabel, formatDuration, type Issue, type MonthlyReport } from '@/lib/report';
 
 const features = tableFeatures({
@@ -19,13 +20,26 @@ const helper = createColumnHelper<typeof features, Issue>();
 
 const EMPTY_ISSUES: Issue[] = [];
 
-function CategoryChips({ issue, colors }: { issue: Issue; colors: Record<string, string> }) {
+function CategoryChips({
+  issue,
+  colors,
+  matches,
+}: {
+  issue: Issue;
+  colors: Record<string, string>;
+  matches?: MatchFn;
+}) {
   const entries = Object.entries(issue.by_category).sort((a, b) => b[1] - a[1]);
 
   return (
     <div className="flex flex-wrap gap-x-2.5 gap-y-1">
       {entries.map(([category, seconds]) => (
-        <span key={category} className="inline-flex items-center gap-1 text-[11px] text-slate-600">
+        <span
+          key={category}
+          className={`inline-flex items-center gap-1 text-[11px] text-slate-600 ${
+            matches && !matches(issue.issue_key, category) ? 'opacity-30' : ''
+          }`}
+        >
           <span
             className="size-2.5 flex-none rounded-sm"
             style={{ background: colors[category] ?? '#ec4899' }}
@@ -37,7 +51,7 @@ function CategoryChips({ issue, colors }: { issue: Issue; colors: Record<string,
   );
 }
 
-export function IssueTable({ report }: { report: MonthlyReport }) {
+export function IssueTable({ report, matches }: { report: MonthlyReport; matches?: MatchFn }) {
   const [sorting, setSorting] = useState<SortingState>([{ id: 'total_seconds', desc: true }]);
 
   const columns = useMemo(
@@ -82,10 +96,12 @@ export function IssueTable({ report }: { report: MonthlyReport }) {
         helper.display({
           id: 'breakdown',
           header: 'Desglose',
-          cell: ({ row }) => <CategoryChips issue={row.original} colors={report.category_colors} />,
+          cell: ({ row }) => (
+            <CategoryChips issue={row.original} colors={report.category_colors} matches={matches} />
+          ),
         }),
       ]),
-    [report.category_colors],
+    [report.category_colors, matches],
   );
 
   const table = useTable({
@@ -129,7 +145,12 @@ export function IssueTable({ report }: { report: MonthlyReport }) {
         </thead>
         <tbody>
           {table.getRowModel().rows.map((row) => (
-            <tr key={row.id} className="hover:bg-slate-50">
+            <tr
+              key={row.id}
+              className={`transition-opacity hover:bg-slate-50 ${
+                matches && !matches(row.original.issue_key) ? 'opacity-30' : ''
+              }`}
+            >
               {row.getAllCells().map((cell) => (
                 <td
                   key={cell.id}

@@ -6,7 +6,7 @@ function orderedCategories(totals: Record<string, number>): string[] {
     .sort((a, b) => (totals[b] ?? 0) - (totals[a] ?? 0));
 }
 
-export function Summary({ report }: { report: MonthlyReport }) {
+export function Summary({ report, issueCount }: { report: MonthlyReport; issueCount: number }) {
   const total = Object.values(report.totals_by_category).reduce((acc, value) => acc + value, 0);
   const categories = orderedCategories(report.totals_by_category);
   const projectCount = Object.keys(report.totals_by_project).length;
@@ -19,7 +19,7 @@ export function Summary({ report }: { report: MonthlyReport }) {
           <div className="text-[11px] tracking-wider text-slate-500 uppercase">Horas hábiles</div>
         </div>
         <div>
-          <div className="text-xl font-semibold tabular-nums">{report.issues.length}</div>
+          <div className="text-xl font-semibold tabular-nums">{issueCount}</div>
           <div className="text-[11px] tracking-wider text-slate-500 uppercase">Issues</div>
         </div>
         <div>
