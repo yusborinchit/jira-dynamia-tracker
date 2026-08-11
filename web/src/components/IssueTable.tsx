@@ -8,6 +8,7 @@ import {
 } from '@tanstack/react-table';
 import { useMemo, useState } from 'react';
 
+import { Avatar } from '@/components/Avatar';
 import type { MatchFn } from '@/lib/filters';
 import {
   categoryColor,
@@ -17,6 +18,7 @@ import {
   formatDuration,
   type Issue,
   type MonthlyReport,
+  UNASSIGNED,
 } from '@/lib/report';
 
 const features = tableFeatures({
@@ -106,6 +108,20 @@ export function IssueTable({ report, matches }: { report: MonthlyReport; matches
               <span className="text-slate-700">{value}</span>
             ) : (
               <span className="text-slate-400">—</span>
+            );
+          },
+        }),
+        helper.accessor((issue) => issue.current_assignee_name ?? '', {
+          id: 'current_assignee',
+          header: 'Asignado',
+          cell: ({ row, getValue }) => {
+            const value = getValue();
+            if (!value) return <span className="text-slate-400">—</span>;
+            return (
+              <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-slate-700">
+                <Avatar report={report} assignee={row.original.current_assignee_id ?? UNASSIGNED} />
+                {value}
+              </span>
             );
           },
         }),

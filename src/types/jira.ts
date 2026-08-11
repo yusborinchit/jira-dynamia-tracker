@@ -20,6 +20,14 @@ export const jiraWebhookSchema = z.object({
         .object({
           summary: z.string().nullable().optional(),
           project: z.object({ key: z.string().optional() }).optional(),
+          assignee: z
+            .object({
+              accountId: z.string().optional(),
+              displayName: z.string().optional(),
+              emailAddress: z.string().optional(),
+              avatarUrls: z.record(z.string(), z.string()).optional(),
+            })
+            .nullish(),
           status: z
             .object({
               id: z.union([z.string(), z.number()]).optional(),
@@ -49,5 +57,13 @@ export interface StatusTransition {
   fromStatusName: string | null;
   toStatusId: string | null;
   toStatusName: string;
+  occurredAt: Date;
+}
+
+export interface AssignmentChange {
+  issueKey: string;
+  accountId: string | null;
+  displayName: string | null;
+  avatarUrl: string | null;
   occurredAt: Date;
 }

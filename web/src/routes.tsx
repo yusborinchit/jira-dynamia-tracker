@@ -14,9 +14,17 @@ import { FilterBar } from '@/components/FilterBar';
 import { Gantt } from '@/components/Gantt';
 import { IssueTable } from '@/components/IssueTable';
 import { TimelineLegend } from '@/components/TimelineLegend';
+import { TooltipProvider } from '@/components/Tooltip';
 import { downloadReportExcel } from '@/lib/excel';
 import { applyFilters, isFiltered } from '@/lib/filters';
-import { allCategories, allProjects, currentDate, reportQuery, type Span } from '@/lib/report';
+import {
+  allAssignees,
+  allCategories,
+  allProjects,
+  currentDate,
+  reportQuery,
+  type Span,
+} from '@/lib/report';
 
 const searchSchema = z.object({
   date: z
@@ -26,14 +34,17 @@ const searchSchema = z.object({
   span: z.enum(['day', 'month']).optional(),
   projects: z.array(z.string()).optional(),
   categories: z.array(z.string()).optional(),
+  assignees: z.array(z.string()).optional(),
   search: z.string().optional(),
 });
 
 const rootRoute = createRootRoute({
   component: () => (
-    <div className="min-h-screen bg-white text-slate-900">
-      <Outlet />
-    </div>
+    <TooltipProvider>
+      <div className="min-h-screen bg-white text-slate-900">
+        <Outlet />
+      </div>
+    </TooltipProvider>
   ),
 });
 
@@ -51,6 +62,7 @@ function Dashboard() {
   const filters = {
     projects: search.projects ?? [],
     categories: search.categories ?? [],
+    assignees: search.assignees ?? [],
     search: search.search ?? '',
   };
 
@@ -61,6 +73,7 @@ function Dashboard() {
     span?: Span;
     projects?: string[];
     categories?: string[];
+    assignees?: string[];
     search?: string;
   }) => {
     navigate({
@@ -71,6 +84,7 @@ function Dashboard() {
           span: merged.span,
           projects: merged.projects?.length ? merged.projects : undefined,
           categories: merged.categories?.length ? merged.categories : undefined,
+          assignees: merged.assignees?.length ? merged.assignees : undefined,
           search: merged.search ? merged.search : undefined,
         };
       },
@@ -95,10 +109,13 @@ function Dashboard() {
           span={span}
           projects={filters.projects}
           categories={filters.categories}
+          assignees={filters.assignees}
           search={filters.search}
           availableProjects={data ? allProjects(data) : []}
           availableCategories={data ? allCategories(data) : []}
+          availableAssignees={data ? allAssignees(data) : []}
           categoryTotals={view?.report.totals_by_category}
+          assigneeTotals={view?.report.totals_by_assignee}
           onExport={
             view ? () => downloadReportExcel(view.report, filters, view.matches) : undefined
           }

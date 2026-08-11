@@ -2,7 +2,7 @@ import { timingSafeEqual } from 'node:crypto';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 
 import { env } from '@/env';
-import { applyStatusTransition } from '@/services/issue.service';
+import { applyAssignmentChange, applyStatusTransition } from '@/services/issue.service';
 import { interpretWebhook } from '@/services/webhook.service';
 import { jiraWebhookSchema } from '@/types/jira';
 
@@ -71,25 +71,30 @@ export async function webhookRoutes(app: FastifyInstance): Promise<void> {
       return reply.send({ ignored: true, reason: outcome.reason });
     }
 
-    const transition = outcome.transition;
+    const { transition, assignment } = outcome;
+    const issueKey = transition?.issueKey ?? assignment?.issueKey ?? null;
 
     try {
-      const result = applyStatusTransition(transition);
+      const statusResult = transition ? applyStatusTransition(transition) : null;
+      const assignmentResult = assignment ? applyAssignmentChange(assignment) : null;
+
       request.log.info(
         {
-          issue: transition.issueKey,
+          issue: issueKey,
           event: outcome.event,
-          from: transition.fromStatusName,
-          to: transition.toStatusName,
-          applied: result.applied,
+          from: transition?.fromStatusName ?? null,
+          to: transition?.toStatusName ?? null,
+          assignee: assignment ? (assignment.displayName ?? 'unassigned') : null,
+          statusApplied: statusResult?.applied ?? false,
+          assignmentApplied: assignmentResult?.applied ?? false,
         },
-        'transition processed',
+        'event processed',
       );
-      return reply.send(
-        result.applied ? { ok: true, issue: transition.issueKey } : { ok: true, duplicate: true },
-      );
+
+      const applied = (statusResult?.applied ?? false) || (assignmentResult?.applied ?? false);
+      return reply.send(applied ? { ok: true, issue: issueKey } : { ok: true, duplicate: true });
     } catch (error) {
-      request.log.error({ err: error, issue: transition.issueKey }, 'failed to apply transition');
+      request.log.error({ err: error, issue: issueKey }, 'failed to apply event');
       return reply.send({ ok: false });
     }
   });

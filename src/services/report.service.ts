@@ -1,4 +1,6 @@
+import type { AssigneeHistoryRow } from '@/db/schema';
 import { CATEGORY_COLORS, isTerminalCategory, UNCATEGORIZED_COLOR } from '@/db/status-mapping.data';
+import { findAssignmentsOverlapping } from '@/repositories/assignment.repository';
 import { findSegmentsOverlapping } from '@/repositories/history.repository';
 import { listIssuesByKeys } from '@/repositories/issue.repository';
 import { loadCategoryResolver, UNCATEGORIZED } from '@/repositories/status.repository';
@@ -36,14 +38,24 @@ export interface MonthlySegment {
   seconds: number;
 }
 
+export interface AssignmentSpan {
+  assignee: string;
+  from: string;
+  to: string | null;
+}
+
 export interface MonthlyIssue {
   issue_key: string;
   project_key: string;
   summary: string | null;
   current_status_name: string | null;
   current_category: string | null;
+  current_assignee_id: string | null;
+  current_assignee_name: string | null;
   total_seconds: number;
   by_category: Record<string, number>;
+  by_assignee: Record<string, Record<string, number>>;
+  assignments: AssignmentSpan[];
   segments: MonthlySegment[];
 }
 
@@ -54,6 +66,9 @@ export interface Report {
   issues: MonthlyIssue[];
   totals_by_category: Record<string, number>;
   totals_by_project: Record<string, number>;
+  totals_by_assignee: Record<string, number>;
+  assignee_names: Record<string, string>;
+  assignee_avatars: Record<string, string>;
   category_colors: Record<string, string>;
   work_schedule: WorkSchedule;
   work_intervals: WorkInterval[];
@@ -62,6 +77,10 @@ export interface Report {
 export interface MonthlyReport extends Report {
   month: string;
 }
+
+export const UNASSIGNED = 'unassigned';
+
+const UNASSIGNED_LABEL = 'Sin asignar';
 
 function pad2(value: number): string {
   return String(value).padStart(2, '0');
@@ -78,6 +97,38 @@ function describeWorkSchedule(): WorkSchedule {
   };
 }
 
+function splitByAssignee(
+  worked: readonly Range[],
+  seconds: number,
+  assignments: readonly AssigneeHistoryRow[] | undefined,
+  now: number,
+): [string, number][] {
+  if (seconds === 0) return [];
+
+  const byAssignee = new Map<string, number>();
+  let attributed = 0;
+
+  for (const assignment of assignments ?? []) {
+    const span = {
+      from: assignment.enteredAt.getTime(),
+      to: assignment.leftAt ? assignment.leftAt.getTime() : now,
+    };
+    const overlap = secondsOf(intersectWorkIntervals(span, worked));
+    if (overlap === 0) continue;
+
+    const key = assignment.accountId ?? UNASSIGNED;
+    byAssignee.set(key, (byAssignee.get(key) ?? 0) + overlap);
+    attributed += overlap;
+  }
+
+  const uncovered = Math.max(0, seconds - attributed);
+  if (uncovered > 0) {
+    byAssignee.set(UNASSIGNED, (byAssignee.get(UNASSIGNED) ?? 0) + uncovered);
+  }
+
+  return [...byAssignee];
+}
+
 export function buildMonthlyReport(month: string, now = Date.now()): MonthlyReport {
   return { month, ...buildReport(monthRange(month), now) };
 }
@@ -87,8 +138,23 @@ export function buildReport(range: Range, now = Date.now()): Report {
   const resolver = loadCategoryResolver();
   const rows = findSegmentsOverlapping(range, now);
 
+  const assignmentsByIssue = new Map<string, AssigneeHistoryRow[]>();
+  const assigneeNames: Record<string, string> = { [UNASSIGNED]: UNASSIGNED_LABEL };
+  const assigneeAvatars: Record<string, string> = {};
+
+  for (const assignment of findAssignmentsOverlapping(range, now)) {
+    const list = assignmentsByIssue.get(assignment.issueKey);
+    if (list) list.push(assignment);
+    else assignmentsByIssue.set(assignment.issueKey, [assignment]);
+
+    if (!assignment.accountId) continue;
+    if (assignment.displayName) assigneeNames[assignment.accountId] = assignment.displayName;
+    if (assignment.avatarUrl) assigneeAvatars[assignment.accountId] = assignment.avatarUrl;
+  }
+
   const byIssue = new Map<string, MonthlyIssue>();
   const totalsByCategory: Record<string, number> = {};
+  const totalsByAssignee: Record<string, number> = {};
 
   for (const row of rows) {
     const start = row.enteredAt.getTime();
@@ -109,8 +175,16 @@ export function buildReport(range: Range, now = Date.now()): Report {
         summary: null,
         current_status_name: null,
         current_category: null,
+        current_assignee_id: null,
+        current_assignee_name: null,
         total_seconds: 0,
         by_category: {},
+        by_assignee: {},
+        assignments: (assignmentsByIssue.get(row.issueKey) ?? []).map((assignment) => ({
+          assignee: assignment.accountId ?? UNASSIGNED,
+          from: toIso(assignment.enteredAt)!,
+          to: toIso(assignment.leftAt),
+        })),
         segments: [],
       };
       byIssue.set(row.issueKey, issue);
@@ -137,6 +211,18 @@ export function buildReport(range: Range, now = Date.now()): Report {
     issue.total_seconds += seconds;
     issue.by_category[category] = (issue.by_category[category] ?? 0) + seconds;
     totalsByCategory[category] = (totalsByCategory[category] ?? 0) + seconds;
+
+    for (const [assignee, assigned] of splitByAssignee(
+      worked,
+      seconds,
+      assignmentsByIssue.get(row.issueKey),
+      now,
+    )) {
+      issue.by_assignee[assignee] ??= {};
+      const buckets = issue.by_assignee[assignee];
+      buckets[category] = (buckets[category] ?? 0) + assigned;
+      totalsByAssignee[assignee] = (totalsByAssignee[assignee] ?? 0) + assigned;
+    }
   }
 
   const issueKeys = [...byIssue.keys()];
@@ -148,6 +234,16 @@ export function buildReport(range: Range, now = Date.now()): Report {
     issue.current_status_name = record.currentStatusName;
     issue.current_category =
       resolver.resolve(record.currentStatusId, record.currentStatusName) ?? UNCATEGORIZED;
+    issue.current_assignee_id = record.currentAssigneeId;
+    issue.current_assignee_name = record.currentAssigneeName;
+
+    if (!record.currentAssigneeId) continue;
+    if (record.currentAssigneeName) {
+      assigneeNames[record.currentAssigneeId] = record.currentAssigneeName;
+    }
+    if (record.currentAssigneeAvatar) {
+      assigneeAvatars[record.currentAssigneeId] = record.currentAssigneeAvatar;
+    }
   }
 
   const issues = [...byIssue.values()]
@@ -167,6 +263,9 @@ export function buildReport(range: Range, now = Date.now()): Report {
     issues,
     totals_by_category: totalsByCategory,
     totals_by_project: totalsByProject,
+    totals_by_assignee: totalsByAssignee,
+    assignee_names: assigneeNames,
+    assignee_avatars: assigneeAvatars,
     category_colors: { ...CATEGORY_COLORS, [UNCATEGORIZED]: UNCATEGORIZED_COLOR },
     work_schedule: describeWorkSchedule(),
     work_intervals: workIntervals.map((interval) => ({

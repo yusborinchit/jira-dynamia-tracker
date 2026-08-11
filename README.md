@@ -172,8 +172,11 @@ in `src/db/status-mapping.data.ts`.
       "project_key": "PUN",
       "summary": "Arreglar login",
       "current_status_name": "Testing",
+      "current_assignee_id": "5f8a…",
+      "current_assignee_name": "Ana Pérez",
       "total_seconds": 86400,
       "by_category": { "development": 86400 },
+      "by_assignee": { "5f8a…": { "development": 86400 } },
       "segments": [
         {
           "status_id": "10002",
@@ -195,9 +198,21 @@ in `src/db/status-mapping.data.ts`.
     }
   ],
   "totals_by_category": { "development": 86400 },
-  "totals_by_project": { "PUN": 86400 }
+  "totals_by_project": { "PUN": 86400 },
+  "totals_by_assignee": { "5f8a…": 86400 },
+  "assignee_names": { "unassigned": "Sin asignar", "5f8a…": "Ana Pérez" },
+  "assignee_avatars": { "5f8a…": "https://…/48x48" }
 }
 ```
+
+`by_assignee` is keyed by Jira `accountId` (or `unassigned`), then by category. It is the split of
+`by_category` across whoever held the issue during each stretch of working time: if an issue is
+reassigned mid-status, the hours are divided between both people. Time not covered by any
+assignment segment lands in `unassigned`.
+
+`assignee_avatars` carries the `avatarUrls` Jira sends with the assignee (largest size available).
+They are Jira's own URLs, so whether they render depends on that instance allowing the browser to
+fetch them; the dashboard falls back to coloured initials whenever an image fails to load.
 
 ## Categories: `status_mapping`
 
@@ -242,10 +257,14 @@ mapping recategorizes the entire recorded history too.
 
 ## Data model
 
-- **`issues`** — one row per issue, with its current status.
+- **`issues`** — one row per issue, with its current status and current assignee.
 - **`status_history`** — one segment per stay in a status (`entered_at`, `left_at`,
   `duration_seconds`). At most one open segment per issue. Durations here are raw calendar
   seconds; the working-hours clipping happens at report time.
+- **`assignee_history`** — the same shape, one segment per stay with an assignee (`account_id`
+  is null while nobody is assigned, and `avatar_url` keeps the picture Jira sent at the time).
+  Recorded from the first webhook onwards: there is no backfill, so issues that existed before
+  this table count as unassigned until they next move.
 - **`statuses`** — catalogue of statuses seen, fills itself in.
 - **`status_mapping`** — Jira status → internal category. Loaded with `pnpm db:mapping`.
 

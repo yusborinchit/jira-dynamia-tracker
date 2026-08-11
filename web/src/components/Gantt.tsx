@@ -1,5 +1,6 @@
 import { Fragment } from 'react';
-
+import { SegmentTooltip } from '@/components/SegmentTooltip';
+import { useTooltip } from '@/components/Tooltip';
 import {
   buildCompressedAxis,
   type CompressedAxis,
@@ -8,7 +9,13 @@ import {
   projectToAxis,
 } from '@/lib/axis';
 import type { MatchFn } from '@/lib/filters';
-import { formatDuration, type Issue, type MonthlyReport, type Segment } from '@/lib/report';
+import {
+  formatDuration,
+  type Issue,
+  type MonthlyReport,
+  type Segment,
+  spansOf,
+} from '@/lib/report';
 
 const MIN_BAR_PX = 3;
 const BLOCK_GAP_PX = 2;
@@ -31,22 +38,36 @@ function DayGrid({ axis }: { axis: CompressedAxis }) {
 }
 
 function SegmentBars({
+  report,
+  issue,
   segment,
   axis,
   color,
   dimmed,
   onSelect,
 }: {
+  report: MonthlyReport;
+  issue: Issue;
   segment: Segment;
   axis: CompressedAxis;
   color: string;
   dimmed: boolean;
   onSelect?: () => void;
 }) {
+  const tooltip = useTooltip();
   if (segment.terminal || segment.work_intervals.length === 0) return null;
 
-  const duration = formatDuration(segment.seconds);
-  const tooltip = `${segment.status_name} · ${segment.category} · ${duration}`;
+  const bind = tooltip(
+    <SegmentTooltip
+      report={report}
+      issue={issue}
+      statusName={segment.status_name}
+      category={segment.category}
+      seconds={segment.seconds}
+      open={segment.open}
+      spans={spansOf(segment.work_intervals)}
+    />,
+  );
 
   return (
     <>
@@ -76,7 +97,6 @@ function SegmentBars({
                 borderColor: color,
                 opacity: dimmed ? DIMMED_OPACITY : 0.55,
               }}
-              title={`${tooltip} · sigue abierto`}
             />
           ) : null;
 
@@ -87,11 +107,11 @@ function SegmentBars({
                 type="button"
                 className={classes}
                 style={style}
-                title={tooltip}
                 onClick={onSelect}
+                {...bind}
               />
             ) : (
-              <div className={classes} style={style} title={tooltip} />
+              <div className={classes} style={style} {...bind} />
             )}
             {trail}
           </Fragment>
@@ -162,6 +182,8 @@ export function Gantt({ report, matches, onSelectIssue }: GanttProps) {
                 {issue.segments.map((segment) => (
                   <SegmentBars
                     key={`${segment.entered_at}-${segment.status_name}`}
+                    report={report}
+                    issue={issue}
                     segment={segment}
                     axis={axis}
                     color={report.category_colors[segment.category] ?? '#ec4899'}

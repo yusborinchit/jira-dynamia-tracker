@@ -1,15 +1,23 @@
-import type { ChangelogItem, JiraWebhookPayload, StatusTransition } from '@/types/jira';
-
-const STATUS_FIELDS = new Set(['status']);
+import type {
+  AssignmentChange,
+  ChangelogItem,
+  JiraWebhookPayload,
+  StatusTransition,
+} from '@/types/jira';
 
 export type IgnoreReason =
   | 'missing_issue'
   | 'missing_status'
-  | 'no_status_change'
+  | 'no_tracked_change'
   | 'unsupported_event';
 
 export type WebhookOutcome =
-  | { kind: 'transition'; event: string; transition: StatusTransition }
+  | {
+      kind: 'changes';
+      event: string;
+      transition: StatusTransition | null;
+      assignment: AssignmentChange | null;
+    }
   | { kind: 'ignored'; event: string; reason: IgnoreReason };
 
 type EventHandler = (payload: JiraWebhookPayload, event: string) => WebhookOutcome;
@@ -18,17 +26,21 @@ function normalizeEvent(webhookEvent: string | undefined): string {
   return (webhookEvent ?? 'unknown').toLowerCase().replace(/^jira:/, '');
 }
 
-function findStatusChange(payload: JiraWebhookPayload): ChangelogItem | undefined {
+function findChange(payload: JiraWebhookPayload, field: string): ChangelogItem | undefined {
   return payload.changelog?.items?.find(
     (candidate) =>
-      STATUS_FIELDS.has((candidate.fieldId ?? '').toLowerCase()) ||
-      STATUS_FIELDS.has((candidate.field ?? '').toLowerCase()),
+      (candidate.fieldId ?? '').toLowerCase() === field ||
+      (candidate.field ?? '').toLowerCase() === field,
   );
 }
 
 function projectKeyFromIssueKey(issueKey: string): string {
   const [prefix] = issueKey.split('-');
   return prefix ?? issueKey;
+}
+
+function occurredAtOf(payload: JiraWebhookPayload): Date {
+  return new Date(payload.timestamp ?? Date.now());
 }
 
 function buildTransition(
@@ -49,25 +61,67 @@ function buildTransition(
     fromStatusName: item?.fromString ?? null,
     toStatusId: item?.to ?? (currentStatus?.id != null ? String(currentStatus.id) : null),
     toStatusName,
-    occurredAt: new Date(payload.timestamp ?? Date.now()),
+    occurredAt: occurredAtOf(payload),
   };
 }
 
-const fromCurrentStatus: EventHandler = (payload, event) => {
+const AVATAR_SIZES = ['48x48', '32x32', '24x24', '16x16'];
+
+function pickAvatar(urls: Record<string, string> | undefined): string | null {
+  if (!urls) return null;
+  for (const size of AVATAR_SIZES) {
+    if (urls[size]) return urls[size];
+  }
+  return Object.values(urls)[0] ?? null;
+}
+
+function buildAssignment(payload: JiraWebhookPayload, item?: ChangelogItem): AssignmentChange {
+  const assignee = payload.issue?.fields?.assignee;
+  const accountId = item ? (item.to ?? null) : (assignee?.accountId ?? null);
+
+  // `fields.assignee` already reflects the update, so it only describes this change
+  // when it is the same person the changelog points at.
+  const current = accountId && assignee?.accountId === accountId ? assignee : undefined;
+
+  return {
+    issueKey: payload.issue?.key ?? '',
+    accountId,
+    displayName: item
+      ? (item.toString ?? current?.displayName ?? null)
+      : (current?.displayName ?? null),
+    avatarUrl: pickAvatar(current?.avatarUrls),
+    occurredAt: occurredAtOf(payload),
+  };
+}
+
+const fromCurrentFields: EventHandler = (payload, event) => {
   const toStatusName = payload.issue?.fields?.status?.name;
   if (!toStatusName) return { kind: 'ignored', event, reason: 'missing_status' };
 
-  return { kind: 'transition', event, transition: buildTransition(payload, toStatusName) };
+  return {
+    kind: 'changes',
+    event,
+    transition: buildTransition(payload, toStatusName),
+    assignment: buildAssignment(payload),
+  };
 };
 
 const fromChangelog: EventHandler = (payload, event) => {
-  const item = findStatusChange(payload);
-  if (!item) return { kind: 'ignored', event, reason: 'no_status_change' };
+  const statusItem = findChange(payload, 'status');
+  const assigneeItem = findChange(payload, 'assignee');
+  if (!statusItem && !assigneeItem) return { kind: 'ignored', event, reason: 'no_tracked_change' };
 
-  const toStatusName = item.toString ?? payload.issue?.fields?.status?.name;
-  if (!toStatusName) return { kind: 'ignored', event, reason: 'missing_status' };
+  const toStatusName = statusItem
+    ? (statusItem.toString ?? payload.issue?.fields?.status?.name)
+    : undefined;
+  if (statusItem && !toStatusName) return { kind: 'ignored', event, reason: 'missing_status' };
 
-  return { kind: 'transition', event, transition: buildTransition(payload, toStatusName, item) };
+  return {
+    kind: 'changes',
+    event,
+    transition: toStatusName ? buildTransition(payload, toStatusName, statusItem) : null,
+    assignment: assigneeItem ? buildAssignment(payload, assigneeItem) : null,
+  };
 };
 
 const ignore =
@@ -75,7 +129,7 @@ const ignore =
   (_payload, event) => ({ kind: 'ignored', event, reason });
 
 const handlers: Record<string, EventHandler> = {
-  issue_created: fromCurrentStatus,
+  issue_created: fromCurrentFields,
   issue_updated: fromChangelog,
   issue_deleted: ignore('unsupported_event'),
 };

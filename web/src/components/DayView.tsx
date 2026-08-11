@@ -1,9 +1,11 @@
+import { SegmentTooltip } from '@/components/SegmentTooltip';
+import { useTooltip } from '@/components/Tooltip';
 import type { MatchFn } from '@/lib/filters';
-import { categoryLabel, formatDuration, type MonthlyReport } from '@/lib/report';
+import type { Issue, MonthlyReport } from '@/lib/report';
 
 interface Block {
+  issue: Issue;
   issueKey: string;
-  summary: string | null;
   statusName: string;
   category: string;
   from: number;
@@ -151,8 +153,8 @@ function collectBlocks(report: MonthlyReport): Omit<Block, 'lane'>[] {
       if (segment.terminal) continue;
       segment.work_intervals.forEach((interval, index) => {
         blocks.push({
+          issue,
           issueKey: issue.issue_key,
-          summary: issue.summary,
           statusName: segment.status_name,
           category: segment.category,
           from: Date.parse(interval.from),
@@ -173,6 +175,7 @@ const BLOCK_GAP_PX = 2;
 const DIMMED_OPACITY = 0.16;
 
 export function DayView({ report, matches }: { report: MonthlyReport; matches?: MatchFn }) {
+  const tooltip = useTooltip();
   const timezone = report.work_schedule.timezone;
   const dimmed = (block: Block): boolean =>
     matches !== undefined && !matches(block.issueKey, block.category);
@@ -291,9 +294,17 @@ export function DayView({ report, matches }: { report: MonthlyReport; matches?: 
                   height: LANE_HEIGHT - 3,
                   background: report.category_colors[block.category] ?? '#ec4899',
                 }}
-                title={`${block.issueKey} · ${block.statusName} · ${categoryLabel(block.category)} · ${formatDuration(
-                  Math.round((block.to - block.from) / 1000),
-                )}`}
+                {...tooltip(
+                  <SegmentTooltip
+                    report={report}
+                    issue={block.issue}
+                    statusName={block.statusName}
+                    category={block.category}
+                    seconds={Math.round((block.to - block.from) / 1000)}
+                    open={block.open && block.isSegmentEnd}
+                    spans={[{ from: block.from, to: block.to }]}
+                  />,
+                )}
               >
                 <span className="truncate font-mono font-semibold">{block.issueKey}</span>
                 <span className="truncate pl-1.5 opacity-75">{block.statusName}</span>

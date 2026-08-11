@@ -1,6 +1,8 @@
-import { useState } from 'react';
+import { type ReactNode, useState } from 'react';
 
+import { Avatar } from '@/components/Avatar';
 import {
+  assigneeLabel,
   categoryLabel,
   formatDuration,
   type MonthlyReport,
@@ -39,12 +41,14 @@ function periodLabel(date: string, span: Span): string {
 function Toggle({
   active,
   color,
+  icon,
   label,
   hint,
   onClick,
 }: {
   active: boolean;
   color?: string;
+  icon?: ReactNode;
   label: string;
   hint?: string;
   onClick: () => void;
@@ -60,6 +64,7 @@ function Toggle({
       }`}
     >
       {color && <span className="size-2.5 rounded-sm" style={{ background: color }} />}
+      {icon}
       {label}
       {hint && <span className="tabular-nums opacity-70">{hint}</span>}
     </button>
@@ -72,16 +77,20 @@ interface FilterBarProps {
   span: Span;
   projects: string[];
   categories: string[];
+  assignees: string[];
   search: string;
   availableProjects: string[];
   availableCategories: string[];
+  availableAssignees: string[];
   categoryTotals: Record<string, number> | undefined;
+  assigneeTotals: Record<string, number> | undefined;
   onExport: (() => Promise<void>) | undefined;
   onChange: (next: {
     date?: string;
     span?: Span;
     projects?: string[];
     categories?: string[];
+    assignees?: string[];
     search?: string;
   }) => void;
 }
@@ -92,10 +101,13 @@ export function FilterBar({
   span,
   projects,
   categories,
+  assignees,
   search,
   availableProjects,
   availableCategories,
+  availableAssignees,
   categoryTotals,
+  assigneeTotals,
   onExport,
   onChange,
 }: FilterBarProps) {
@@ -160,7 +172,7 @@ export function FilterBar({
           type="search"
           value={search}
           onChange={(event) => onChange({ search: event.target.value })}
-          placeholder="Buscar issue, resumen o estado…"
+          placeholder="Buscar issue, resumen, estado o persona…"
           className="min-w-56 flex-1 rounded-md border border-slate-300 px-3 py-1.5 text-sm outline-none focus:border-slate-500"
         />
 
@@ -187,6 +199,28 @@ export function FilterBar({
               onClick={() => onChange({ projects: toggle(projects, project) })}
             />
           ))}
+        </div>
+      )}
+
+      {availableAssignees.length > 1 && report && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="mr-1 text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
+            Persona
+          </span>
+          {availableAssignees.map((assignee) => {
+            const active = assignees.includes(assignee);
+            const seconds = assigneeTotals?.[assignee];
+            return (
+              <Toggle
+                key={assignee}
+                active={active}
+                icon={<Avatar report={report} assignee={assignee} size={16} />}
+                label={assigneeLabel(report, assignee)}
+                hint={active && seconds ? formatDuration(seconds) : undefined}
+                onClick={() => onChange({ assignees: toggle(assignees, assignee) })}
+              />
+            );
+          })}
         </div>
       )}
 

@@ -31,6 +31,27 @@ export function upsertIssue(input: UpsertIssueInput, client: DbClient = db): voi
     .run();
 }
 
+export interface UpdateIssueAssigneeInput {
+  issueKey: string;
+  accountId: string | null;
+  displayName: string | null;
+  avatarUrl: string | null;
+  updatedAt: Date;
+}
+
+export function updateIssueAssignee(input: UpdateIssueAssigneeInput, client: DbClient = db): void {
+  client
+    .update(issues)
+    .set({
+      currentAssigneeId: input.accountId,
+      currentAssigneeName: input.displayName,
+      currentAssigneeAvatar: input.avatarUrl,
+      updatedAt: input.updatedAt,
+    })
+    .where(eq(issues.issueKey, input.issueKey))
+    .run();
+}
+
 export function findIssueByKey(issueKey: string, client: DbClient = db): Issue | undefined {
   return client.select().from(issues).where(eq(issues.issueKey, issueKey)).get();
 }

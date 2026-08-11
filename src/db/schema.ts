@@ -20,6 +20,9 @@ export const issues = sqliteTable(
     summary: text('summary'),
     currentStatusId: text('current_status_id'),
     currentStatusName: text('current_status_name'),
+    currentAssigneeId: text('current_assignee_id'),
+    currentAssigneeName: text('current_assignee_name'),
+    currentAssigneeAvatar: text('current_assignee_avatar'),
     updatedAt: timestampMs('updated_at').notNull(),
   },
   (t) => [index('issues_project_key_idx').on(t.projectKey)],
@@ -41,6 +44,25 @@ export const statusHistory = sqliteTable(
     index('status_history_issue_key_idx').on(t.issueKey),
     index('status_history_entered_at_idx').on(t.enteredAt),
     index('status_history_open_idx').on(t.issueKey, t.leftAt),
+  ],
+);
+
+export const assigneeHistory = sqliteTable(
+  'assignee_history',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    issueKey: text('issue_key').notNull(),
+    accountId: text('account_id'),
+    displayName: text('display_name'),
+    avatarUrl: text('avatar_url'),
+    enteredAt: timestampMs('entered_at').notNull(),
+    leftAt: timestampMs('left_at'),
+    durationSeconds: integer('duration_seconds'),
+  },
+  (t) => [
+    index('assignee_history_issue_key_idx').on(t.issueKey),
+    index('assignee_history_entered_at_idx').on(t.enteredAt),
+    index('assignee_history_open_idx').on(t.issueKey, t.leftAt),
   ],
 );
 
@@ -71,4 +93,5 @@ export const statusMapping = sqliteTable(
 
 export type Issue = typeof issues.$inferSelect;
 export type StatusHistoryRow = typeof statusHistory.$inferSelect;
+export type AssigneeHistoryRow = typeof assigneeHistory.$inferSelect;
 export type StatusMappingRow = typeof statusMapping.$inferSelect;

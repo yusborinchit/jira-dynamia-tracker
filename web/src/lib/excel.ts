@@ -1,6 +1,6 @@
 import type { Border, Fill, Row, Worksheet } from 'exceljs';
 
-import type { MatchFn, ReportFilters } from '@/lib/filters';
+import { filtersLabel, type MatchFn, type ReportFilters } from '@/lib/filters';
 import {
   CATEGORY_COLOR_FALLBACK,
   categoryLabel,
@@ -56,16 +56,6 @@ function periodLabel(report: MonthlyReport): string {
   return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
-function filtersLabel(filters: ReportFilters): string {
-  const parts: string[] = [];
-  if (filters.projects.length > 0) parts.push(`Proyectos: ${filters.projects.join(', ')}`);
-  if (filters.categories.length > 0) {
-    parts.push(`Categorías: ${filters.categories.map(categoryLabel).join(', ')}`);
-  }
-  if (filters.search) parts.push(`Búsqueda: "${filters.search}"`);
-  return parts.length > 0 ? parts.join(' · ') : 'Sin filtros';
-}
-
 function usedCategories(report: MonthlyReport): string[] {
   const seen = new Set<string>();
   for (const issue of report.issues) {
@@ -88,23 +78,27 @@ function addMetaRow(sheet: Worksheet, label: string, value: string): void {
   row.getCell(2).font = { size: 9, color: { argb: MUTED_TEXT } };
 }
 
+const FIXED_COLUMNS = [
+  { header: 'Issue', width: 14 },
+  { header: 'Proyecto', width: 12 },
+  { header: 'Resumen', width: 60 },
+  { header: 'Asignado', width: 20 },
+  { header: 'Estado actual', width: 16 },
+  { header: 'Total', width: 11 },
+];
+
+const STATUS_COLUMN = FIXED_COLUMNS.findIndex((column) => column.header === 'Estado actual') + 1;
+const TOTAL_COLUMN = FIXED_COLUMNS.length;
+
 function styleHeaderRow(row: Row, report: MonthlyReport, categories: string[]): void {
   row.height = 22;
   row.eachCell((cell, index) => {
     const category = categories[index - FIXED_COLUMNS.length - 1];
     cell.font = { bold: true, size: 10, color: { argb: HEADER_TEXT } };
     cell.fill = solidFill(category ? categoryColorArgb(report, category) : HEADER_BACKGROUND);
-    cell.alignment = { vertical: 'middle', horizontal: index > 4 ? 'right' : 'left' };
+    cell.alignment = { vertical: 'middle', horizontal: index >= TOTAL_COLUMN ? 'right' : 'left' };
   });
 }
-
-const FIXED_COLUMNS = [
-  { header: 'Issue', width: 14 },
-  { header: 'Proyecto', width: 12 },
-  { header: 'Resumen', width: 60 },
-  { header: 'Estado actual', width: 16 },
-  { header: 'Total', width: 11 },
-];
 
 function buildDetailSheet(
   sheet: Worksheet,
@@ -122,7 +116,7 @@ function buildDetailSheet(
   title.height = 20;
 
   addMetaRow(sheet, 'Período', periodLabel(report));
-  addMetaRow(sheet, 'Filtros', filtersLabel(filters));
+  addMetaRow(sheet, 'Filtros', filtersLabel(filters, report));
   addMetaRow(
     sheet,
     'Horario laboral',
@@ -138,6 +132,7 @@ function buildDetailSheet(
   styleHeaderRow(headerRow, report, categories);
 
   const headerRowNumber = headerRow.number;
+  const lastColumn = FIXED_COLUMNS.length + categories.length;
   const issues = sortIssues(report.issues);
 
   issues.forEach((issue, index) => {
@@ -148,6 +143,7 @@ function buildDetailSheet(
       issue.issue_key,
       issue.project_key || '—',
       issue.summary ?? '',
+      issue.current_assignee_name ?? '—',
       categoryLabel(category),
       hours(issue.total_seconds),
       ...categories.map((name) =>
@@ -160,7 +156,7 @@ function buildDetailSheet(
     row.getCell(2).font = { name: 'Consolas', size: 10 };
     row.getCell(3).alignment = { vertical: 'top', wrapText: true };
 
-    const statusCell = row.getCell(4);
+    const statusCell = row.getCell(STATUS_COLUMN);
     statusCell.font = { bold: highlighted, size: 10, color: { argb: HEADER_TEXT } };
     statusCell.fill = solidFill(categoryColorArgb(report, category));
     statusCell.alignment = { vertical: 'top', horizontal: 'left' };
@@ -168,22 +164,23 @@ function buildDetailSheet(
       statusCell.note = `Estado en Jira: ${issue.current_status_name}`;
     }
 
-    for (let column = 5; column <= FIXED_COLUMNS.length + categories.length; column += 1) {
+    for (let column = TOTAL_COLUMN; column <= lastColumn; column += 1) {
       const cell = row.getCell(column);
       cell.numFmt = HOURS_FORMAT;
       cell.alignment = { vertical: 'top', horizontal: 'right' };
     }
-    row.getCell(5).font = { bold: true, size: 10 };
+    row.getCell(TOTAL_COLUMN).font = { bold: true, size: 10 };
 
-    if (highlighted) {
-      for (let column = 1; column <= FIXED_COLUMNS.length + categories.length; column += 1) {
-        if (column === 4) continue;
-        row.getCell(column).fill = solidFill(HIGHLIGHT_BACKGROUND);
-      }
-    } else if (index % 2 === 1) {
-      for (let column = 1; column <= FIXED_COLUMNS.length + categories.length; column += 1) {
-        if (column === 4) continue;
-        row.getCell(column).fill = solidFill(BANDED_BACKGROUND);
+    const background = highlighted
+      ? HIGHLIGHT_BACKGROUND
+      : index % 2 === 1
+        ? BANDED_BACKGROUND
+        : null;
+
+    if (background) {
+      for (let column = 1; column <= lastColumn; column += 1) {
+        if (column === STATUS_COLUMN) continue;
+        row.getCell(column).fill = solidFill(background);
       }
     }
   });
@@ -192,8 +189,8 @@ function buildDetailSheet(
     const firstDataRow = headerRowNumber + 1;
     const lastDataRow = headerRowNumber + issues.length;
 
-    const totalsRow = sheet.addRow(['Total por categoría', '', '', '', null]);
-    for (let column = 6; column <= FIXED_COLUMNS.length + categories.length; column += 1) {
+    const totalsRow = sheet.addRow(['Total por categoría']);
+    for (let column = TOTAL_COLUMN + 1; column <= lastColumn; column += 1) {
       const letter = sheet.getColumn(column).letter;
       totalsRow.getCell(column).value = {
         formula: `SUM(${letter}${firstDataRow}:${letter}${lastDataRow})`,
@@ -208,7 +205,7 @@ function buildDetailSheet(
 
     sheet.autoFilter = {
       from: { row: headerRowNumber, column: 1 },
-      to: { row: lastDataRow, column: FIXED_COLUMNS.length + categories.length },
+      to: { row: lastDataRow, column: lastColumn },
     };
   }
 
