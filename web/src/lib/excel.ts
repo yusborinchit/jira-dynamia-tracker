@@ -20,7 +20,6 @@ const BANDED_BACKGROUND = 'FFF8FAFC';
 const MUTED_TEXT = 'FF64748B';
 
 const HOURS_FORMAT = '0.00" h"';
-const PERCENT_FORMAT = '0.0%';
 
 const PERIOD_FORMAT: Record<string, Intl.DateTimeFormatOptions> = {
   day: { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' },
@@ -193,8 +192,8 @@ function buildDetailSheet(
     const firstDataRow = headerRowNumber + 1;
     const lastDataRow = headerRowNumber + issues.length;
 
-    const totalsRow = sheet.addRow(['Total', '', '', '', null]);
-    for (let column = 5; column <= FIXED_COLUMNS.length + categories.length; column += 1) {
+    const totalsRow = sheet.addRow(['Total por categoría', '', '', '', null]);
+    for (let column = 6; column <= FIXED_COLUMNS.length + categories.length; column += 1) {
       const letter = sheet.getColumn(column).letter;
       totalsRow.getCell(column).value = {
         formula: `SUM(${letter}${firstDataRow}:${letter}${lastDataRow})`,
@@ -214,56 +213,6 @@ function buildDetailSheet(
   }
 
   sheet.views = [{ state: 'frozen', xSplit: 1, ySplit: headerRowNumber }];
-}
-
-function buildSummarySheet(sheet: Worksheet, report: MonthlyReport, categories: string[]): void {
-  sheet.columns = [{ width: 4 }, { width: 26 }, { width: 12 }, { width: 10 }];
-
-  const title = sheet.addRow(['', 'Totales por categoría']);
-  title.getCell(2).font = { bold: true, size: 12 };
-
-  const totalSeconds = Object.values(report.totals_by_category).reduce(
-    (sum, seconds) => sum + seconds,
-    0,
-  );
-
-  for (const category of categories) {
-    const seconds = report.totals_by_category[category] ?? 0;
-    const row = sheet.addRow([
-      '',
-      categoryLabel(category),
-      hours(seconds),
-      totalSeconds > 0 ? seconds / totalSeconds : 0,
-    ]);
-    row.getCell(1).fill = solidFill(categoryColorArgb(report, category));
-    row.getCell(3).numFmt = HOURS_FORMAT;
-    row.getCell(4).numFmt = PERCENT_FORMAT;
-  }
-
-  const categoryTotal = sheet.addRow(['', 'Total', hours(totalSeconds), 1]);
-  categoryTotal.getCell(3).numFmt = HOURS_FORMAT;
-  categoryTotal.getCell(4).numFmt = PERCENT_FORMAT;
-  categoryTotal.eachCell((cell) => {
-    cell.font = { bold: true };
-    cell.border = { top: topBorder(HEADER_BACKGROUND) };
-  });
-
-  sheet.addRow([]);
-
-  const projectsTitle = sheet.addRow(['', 'Totales por proyecto']);
-  projectsTitle.getCell(2).font = { bold: true, size: 12 };
-
-  const projects = Object.entries(report.totals_by_project).sort((a, b) => b[1] - a[1]);
-  for (const [project, seconds] of projects) {
-    const row = sheet.addRow([
-      '',
-      project,
-      hours(seconds),
-      totalSeconds > 0 ? seconds / totalSeconds : 0,
-    ]);
-    row.getCell(3).numFmt = HOURS_FORMAT;
-    row.getCell(4).numFmt = PERCENT_FORMAT;
-  }
 }
 
 function fileName(report: MonthlyReport): string {
@@ -290,7 +239,6 @@ export async function downloadReportExcel(
   const categories = usedCategories(report);
 
   buildDetailSheet(workbook.addWorksheet('Detalle'), report, filters, categories);
-  buildSummarySheet(workbook.addWorksheet('Resumen'), report, categories);
 
   const buffer = await workbook.xlsx.writeBuffer();
   const blob = new Blob([buffer], {
