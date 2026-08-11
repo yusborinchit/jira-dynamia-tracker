@@ -9,7 +9,15 @@ import {
 import { useMemo, useState } from 'react';
 
 import type { MatchFn } from '@/lib/filters';
-import { categoryLabel, formatDuration, type Issue, type MonthlyReport } from '@/lib/report';
+import {
+  categoryColor,
+  categoryLabel,
+  categoryRank,
+  currentCategoryOf,
+  formatDuration,
+  type Issue,
+  type MonthlyReport,
+} from '@/lib/report';
 
 const features = tableFeatures({
   rowSortingFeature,
@@ -19,6 +27,28 @@ const features = tableFeatures({
 const helper = createColumnHelper<typeof features, Issue>();
 
 const EMPTY_ISSUES: Issue[] = [];
+
+const HIGHLIGHTED_CATEGORY = 'development';
+
+function StatusChip({ issue, report }: { issue: Issue; report: MonthlyReport }) {
+  const category = currentCategoryOf(issue);
+  const highlighted = category === HIGHLIGHTED_CATEGORY;
+
+  return (
+    <span
+      title={issue.current_status_name ?? undefined}
+      className={`inline-flex items-center gap-1.5 whitespace-nowrap ${
+        highlighted ? 'font-semibold text-slate-900' : 'text-slate-700'
+      }`}
+    >
+      <span
+        className="size-2.5 flex-none rounded-sm"
+        style={{ background: categoryColor(report, category) }}
+      />
+      {categoryLabel(category)}
+    </span>
+  );
+}
 
 function CategoryChips({
   issue,
@@ -52,7 +82,7 @@ function CategoryChips({
 }
 
 export function IssueTable({ report, matches }: { report: MonthlyReport; matches?: MatchFn }) {
-  const [sorting, setSorting] = useState<SortingState>([{ id: 'total_seconds', desc: true }]);
+  const [sorting, setSorting] = useState<SortingState>([{ id: 'current_category', desc: false }]);
 
   const columns = useMemo(
     () =>
@@ -79,13 +109,18 @@ export function IssueTable({ report, matches }: { report: MonthlyReport; matches
             );
           },
         }),
-        helper.accessor((issue) => issue.current_status_name ?? '', {
-          id: 'current_status_name',
+        helper.accessor((issue) => currentCategoryOf(issue), {
+          id: 'current_category',
           header: 'Estado actual',
-          cell: ({ getValue }) => {
-            const value = getValue();
-            return value ? value : <span className="text-slate-400">—</span>;
+          sortDescFirst: false,
+          sortFn: (rowA, rowB) => {
+            const byCategory =
+              categoryRank(currentCategoryOf(rowA.original)) -
+              categoryRank(currentCategoryOf(rowB.original));
+            if (byCategory !== 0) return byCategory;
+            return rowB.original.total_seconds - rowA.original.total_seconds;
           },
+          cell: ({ row }) => <StatusChip issue={row.original} report={report} />,
         }),
         helper.accessor('total_seconds', {
           header: 'Total',
@@ -101,7 +136,7 @@ export function IssueTable({ report, matches }: { report: MonthlyReport; matches
           ),
         }),
       ]),
-    [report.category_colors, matches],
+    [report, matches],
   );
 
   const table = useTable({
@@ -111,6 +146,8 @@ export function IssueTable({ report, matches }: { report: MonthlyReport; matches
     state: { sorting },
     onSortingChange: setSorting,
   });
+
+  const groupedByCategory = sorting[0]?.id === 'current_category';
 
   if (report.issues.length === 0) {
     return (
@@ -144,25 +181,35 @@ export function IssueTable({ report, matches }: { report: MonthlyReport; matches
           ))}
         </thead>
         <tbody>
-          {table.getRowModel().rows.map((row) => (
-            <tr
-              key={row.id}
-              className={`transition-opacity hover:bg-slate-50 ${
-                matches && !matches(row.original.issue_key) ? 'opacity-30' : ''
-              }`}
-            >
-              {row.getAllCells().map((cell) => (
-                <td
-                  key={cell.id}
-                  className={`border-b border-slate-100 pt-1.5 pr-2 pb-1.5 align-top ${
-                    cell.column.id === 'total_seconds' ? 'text-right' : ''
-                  }`}
-                >
-                  <table.FlexRender cell={cell} />
-                </td>
-              ))}
-            </tr>
-          ))}
+          {table.getRowModel().rows.map((row, index, rows) => {
+            const category = currentCategoryOf(row.original);
+            const highlighted = category === HIGHLIGHTED_CATEGORY;
+            const previous = rows[index - 1];
+            const startsGroup =
+              groupedByCategory &&
+              previous !== undefined &&
+              currentCategoryOf(previous.original) !== category;
+
+            return (
+              <tr
+                key={row.id}
+                className={`transition-opacity ${
+                  highlighted ? 'bg-blue-50/70 hover:bg-blue-100/60' : 'hover:bg-slate-50'
+                } ${matches && !matches(row.original.issue_key) ? 'opacity-30' : ''}`}
+              >
+                {row.getAllCells().map((cell) => (
+                  <td
+                    key={cell.id}
+                    className={`border-b border-slate-100 pt-1.5 pr-2 pb-1.5 align-top ${
+                      startsGroup ? 'border-t-2 border-t-slate-300' : ''
+                    } ${cell.column.id === 'total_seconds' ? 'text-right' : ''}`}
+                  >
+                    <table.FlexRender cell={cell} />
+                  </td>
+                ))}
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>

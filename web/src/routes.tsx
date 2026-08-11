@@ -13,8 +13,8 @@ import { DayView } from '@/components/DayView';
 import { FilterBar } from '@/components/FilterBar';
 import { Gantt } from '@/components/Gantt';
 import { IssueTable } from '@/components/IssueTable';
-import { Summary } from '@/components/Summary';
 import { TimelineLegend } from '@/components/TimelineLegend';
+import { downloadReportExcel } from '@/lib/excel';
 import { applyFilters, isFiltered } from '@/lib/filters';
 import { allCategories, allProjects, currentDate, reportQuery, type Span } from '@/lib/report';
 
@@ -98,6 +98,10 @@ function Dashboard() {
           search={filters.search}
           availableProjects={data ? allProjects(data) : []}
           availableCategories={data ? allCategories(data) : []}
+          categoryTotals={view?.report.totals_by_category}
+          onExport={
+            view ? () => downloadReportExcel(view.report, filters, view.matches) : undefined
+          }
           onChange={update}
         />
       </header>
@@ -112,8 +116,6 @@ function Dashboard() {
 
       {data && view && (
         <>
-          <Summary report={view.report} issueCount={view.matchedIssues} />
-
           {view.report.issues.length === 0 ? (
             <p className="py-16 text-center text-slate-500">
               No hay actividad registrada en este período.

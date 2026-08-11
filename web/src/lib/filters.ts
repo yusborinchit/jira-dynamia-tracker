@@ -1,4 +1,4 @@
-import type { Issue, MonthlyReport } from '@/lib/report';
+import { categoryLabel, currentCategoryOf, type Issue, type MonthlyReport } from '@/lib/report';
 
 export interface ReportFilters {
   projects: string[];
@@ -22,7 +22,8 @@ function matchesSearch(issue: Issue, search: string): boolean {
   return (
     issue.issue_key.toLowerCase().includes(needle) ||
     (issue.summary ?? '').toLowerCase().includes(needle) ||
-    (issue.current_status_name ?? '').toLowerCase().includes(needle)
+    (issue.current_status_name ?? '').toLowerCase().includes(needle) ||
+    categoryLabel(currentCategoryOf(issue)).toLowerCase().includes(needle)
   );
 }
 

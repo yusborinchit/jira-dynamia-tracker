@@ -24,6 +24,7 @@ export interface Issue {
   project_key: string;
   summary: string | null;
   current_status_name: string | null;
+  current_category: string | null;
   total_seconds: number;
   by_category: Record<string, number>;
   segments: Segment[];
@@ -108,6 +109,33 @@ export function formatDuration(seconds: number): string {
 export function categoryLabel(category: string): string {
   const spaced = category.replace(/_/g, ' ');
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+export const UNCATEGORIZED = 'uncategorized';
+
+export const CATEGORY_COLOR_FALLBACK = '#ec4899';
+
+export const CATEGORY_ORDER = [
+  'development',
+  'testing',
+  'deploy',
+  'waiting_info',
+  'pending',
+  UNCATEGORIZED,
+  'done',
+];
+
+export function categoryRank(category: string | null): number {
+  const index = category === null ? -1 : CATEGORY_ORDER.indexOf(category);
+  return index === -1 ? CATEGORY_ORDER.length : index;
+}
+
+export function currentCategoryOf(issue: Issue): string {
+  return issue.current_category ?? UNCATEGORIZED;
+}
+
+export function categoryColor(report: MonthlyReport, category: string): string {
+  return report.category_colors[category] ?? CATEGORY_COLOR_FALLBACK;
 }
 
 export function allCategories(report: MonthlyReport): string[] {

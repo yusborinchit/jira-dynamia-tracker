@@ -1,4 +1,12 @@
-import { categoryLabel, type MonthlyReport, type Span, shiftDate } from '@/lib/report';
+import { useState } from 'react';
+
+import {
+  categoryLabel,
+  formatDuration,
+  type MonthlyReport,
+  type Span,
+  shiftDate,
+} from '@/lib/report';
 
 const SPANS: { value: Span; label: string }[] = [
   { value: 'day', label: 'Día' },
@@ -32,11 +40,13 @@ function Toggle({
   active,
   color,
   label,
+  hint,
   onClick,
 }: {
   active: boolean;
   color?: string;
   label: string;
+  hint?: string;
   onClick: () => void;
 }) {
   return (
@@ -51,6 +61,7 @@ function Toggle({
     >
       {color && <span className="size-2.5 rounded-sm" style={{ background: color }} />}
       {label}
+      {hint && <span className="tabular-nums opacity-70">{hint}</span>}
     </button>
   );
 }
@@ -64,6 +75,8 @@ interface FilterBarProps {
   search: string;
   availableProjects: string[];
   availableCategories: string[];
+  categoryTotals: Record<string, number> | undefined;
+  onExport: (() => Promise<void>) | undefined;
   onChange: (next: {
     date?: string;
     span?: Span;
@@ -82,10 +95,24 @@ export function FilterBar({
   search,
   availableProjects,
   availableCategories,
+  categoryTotals,
+  onExport,
   onChange,
 }: FilterBarProps) {
+  const [isExporting, setIsExporting] = useState(false);
+
   const toggle = (list: string[], value: string): string[] =>
     list.includes(value) ? list.filter((item) => item !== value) : [...list, value];
+
+  const exportToExcel = async () => {
+    if (!onExport) return;
+    setIsExporting(true);
+    try {
+      await onExport();
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   return (
     <div className="flex flex-col gap-3">
@@ -137,14 +164,14 @@ export function FilterBar({
           className="min-w-56 flex-1 rounded-md border border-slate-300 px-3 py-1.5 text-sm outline-none focus:border-slate-500"
         />
 
-        <a
-          href={`/reports/monthly?month=${date.slice(0, 7)}&format=html`}
-          target="_blank"
-          rel="noreferrer"
-          className="rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+        <button
+          type="button"
+          onClick={exportToExcel}
+          disabled={!onExport || isExporting}
+          className="rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          Vista imprimible
-        </a>
+          {isExporting ? 'Generando…' : 'Descargar Excel'}
+        </button>
       </div>
 
       {availableProjects.length > 1 && (
@@ -168,15 +195,20 @@ export function FilterBar({
           <span className="mr-1 text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
             Categoría
           </span>
-          {availableCategories.map((category) => (
-            <Toggle
-              key={category}
-              active={categories.includes(category)}
-              color={report.category_colors[category] ?? '#ec4899'}
-              label={categoryLabel(category)}
-              onClick={() => onChange({ categories: toggle(categories, category) })}
-            />
-          ))}
+          {availableCategories.map((category) => {
+            const active = categories.includes(category);
+            const seconds = categoryTotals?.[category];
+            return (
+              <Toggle
+                key={category}
+                active={active}
+                color={report.category_colors[category] ?? '#ec4899'}
+                label={categoryLabel(category)}
+                hint={active && seconds ? formatDuration(seconds) : undefined}
+                onClick={() => onChange({ categories: toggle(categories, category) })}
+              />
+            );
+          })}
         </div>
       )}
     </div>
