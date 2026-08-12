@@ -2,6 +2,7 @@ import { timingSafeEqual } from 'node:crypto';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 
 import { env } from '@/env';
+import { publish } from '@/services/events';
 import { applyAssignmentChange, applyStatusTransition } from '@/services/issue.service';
 import { interpretWebhook } from '@/services/webhook.service';
 import { jiraWebhookSchema } from '@/types/jira';
@@ -92,6 +93,21 @@ export async function webhookRoutes(app: FastifyInstance): Promise<void> {
       );
 
       const applied = (statusResult?.applied ?? false) || (assignmentResult?.applied ?? false);
+
+      if (applied && issueKey) {
+        publish({
+          type: 'issue.changed',
+          issueKey,
+          statusName: transition?.toStatusName ?? null,
+          assignee: assignment ? (assignment.displayName ?? 'unassigned') : null,
+          occurredAt: (
+            transition?.occurredAt ??
+            assignment?.occurredAt ??
+            new Date()
+          ).toISOString(),
+        });
+      }
+
       return reply.send(applied ? { ok: true, issue: issueKey } : { ok: true, duplicate: true });
     } catch (error) {
       request.log.error({ err: error, issue: issueKey }, 'failed to apply event');

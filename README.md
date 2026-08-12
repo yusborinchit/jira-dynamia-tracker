@@ -46,6 +46,12 @@ and toggles per project and per category. Filters live in the URL, so any view i
 Filtering happens entirely in the browser over the period's JSON — a month is tens of issues, not
 thousands, so there is no filtering API. Changing period or span is the only round trip.
 
+**The dashboard refreshes itself.** `GET /events` is a Server-Sent Events stream: every webhook the
+server actually applies is published to an in-process bus (`src/services/events.ts`) and pushed to
+every connected browser as an `issue.changed` event, which invalidates the report query. No polling,
+no F5, and one direction only — the browser never sends anything over the stream. The header shows
+the connection state; `EventSource` reconnects on its own if the server restarts.
+
 **The month timeline uses a compressed axis.** Nights and weekends are removed from the axis
 entirely, so every column is one working day and the whole width is time that can actually hold
 work. A calendar axis gives each day 1/31 of the width, of which only a third is working hours, so
@@ -141,6 +147,7 @@ keep the log clean.
 | `POST` | `/webhooks/jira` | Receives events (requires the secret header) |
 | `GET` | `/reports/monthly?month=YYYY-MM` | The whole month as JSON, or `&format=html` for the printable view |
 | `GET` | `/reports/range?date=YYYY-MM-DD&span=day\|month` | Arbitrary period as JSON; what the dashboard uses |
+| `GET` | `/events` | SSE stream; emits `issue.changed` whenever a webhook is applied |
 
 `month` and `date` are optional and default to today. `span` defaults to `month`. The server
 resolves the period in `REPORT_TIMEZONE`, so the browser never does timezone math.

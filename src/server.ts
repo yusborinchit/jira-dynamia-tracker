@@ -3,6 +3,7 @@ import Fastify from 'fastify';
 
 import { sqlite } from '@/db/db';
 import { env } from '@/env';
+import { eventRoutes } from '@/routes/events.route';
 import { healthRoutes } from '@/routes/health.route';
 import { reportRoutes } from '@/routes/report.route';
 import { webRoutes } from '@/routes/web.route';
@@ -17,6 +18,7 @@ export function buildServer() {
   app.register(healthRoutes);
   app.register(webhookRoutes);
   app.register(reportRoutes);
+  app.register(eventRoutes);
   app.register(webRoutes);
 
   return app;

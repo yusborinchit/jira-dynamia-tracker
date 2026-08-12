@@ -19,6 +19,7 @@ export default defineConfig({
     proxy: {
       '/reports': 'http://localhost:3000',
       '/health': 'http://localhost:3000',
+      '/events': 'http://localhost:3000',
     },
   },
 });

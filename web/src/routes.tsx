@@ -17,6 +17,7 @@ import { TimelineLegend } from '@/components/TimelineLegend';
 import { TooltipProvider } from '@/components/Tooltip';
 import { downloadReportExcel } from '@/lib/excel';
 import { applyFilters, isFiltered } from '@/lib/filters';
+import { type LiveStatus, useLiveReports } from '@/lib/live';
 import {
   allAssignees,
   allCategories,
@@ -53,6 +54,27 @@ const TIMELINE_TITLE: Record<Span, string> = {
   month: 'Línea de tiempo',
 };
 
+const LIVE_LABEL: Record<LiveStatus, string> = {
+  connecting: 'conectando…',
+  live: 'en vivo',
+  offline: 'sin conexión',
+};
+
+const LIVE_DOT: Record<LiveStatus, string> = {
+  connecting: 'bg-amber-400',
+  live: 'bg-emerald-500',
+  offline: 'bg-slate-300',
+};
+
+function LiveIndicator({ status }: { status: LiveStatus }) {
+  return (
+    <span className="flex items-center gap-1.5 text-xs text-slate-400">
+      <span className={`size-1.5 rounded-full ${LIVE_DOT[status]}`} />
+      {LIVE_LABEL[status]}
+    </span>
+  );
+}
+
 function Dashboard() {
   const search = useSearch({ from: '/' });
   const navigate = useNavigate({ from: '/' });
@@ -67,6 +89,7 @@ function Dashboard() {
   };
 
   const { data, isPending, isError, error, isFetching } = useQuery(reportQuery(date, span));
+  const liveStatus = useLiveReports();
 
   const update = (next: {
     date?: string;
@@ -100,7 +123,10 @@ function Dashboard() {
       <header className="flex flex-col gap-4 border-b-2 border-slate-900 pb-4">
         <div className="flex items-baseline justify-between gap-4">
           <h1 className="text-xl font-semibold tracking-tight">Jira Tracker</h1>
-          {isFetching && <span className="text-xs text-slate-400">actualizando…</span>}
+          <div className="flex items-center gap-3">
+            {isFetching && <span className="text-xs text-slate-400">actualizando…</span>}
+            <LiveIndicator status={liveStatus} />
+          </div>
         </div>
 
         <FilterBar
