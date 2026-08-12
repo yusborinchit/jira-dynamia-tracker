@@ -119,6 +119,14 @@ export function formatDuration(seconds: number): string {
   return `${secs}s`;
 }
 
+const MIN_SEGMENT_SECONDS = 300;
+
+// A status that only lasted a few minutes is almost always a misclick on the
+// board. Totals keep it; the timelines hide it so the bars stay readable.
+export function isBlip(segment: Segment): boolean {
+  return !segment.open && segment.seconds < MIN_SEGMENT_SECONDS;
+}
+
 export function categoryLabel(category: string): string {
   const spaced = category.replace(/_/g, ' ');
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);

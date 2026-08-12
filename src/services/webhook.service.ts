@@ -94,6 +94,13 @@ function buildAssignment(payload: JiraWebhookPayload, item?: ChangelogItem): Ass
   };
 }
 
+// Issues assigned before assignment tracking existed have no changelog entry to
+// replay, so any event that carries an assignee is a chance to seed the history.
+function assignmentFromCurrentFields(payload: JiraWebhookPayload): AssignmentChange | null {
+  if (!payload.issue?.fields?.assignee?.accountId) return null;
+  return buildAssignment(payload);
+}
+
 const fromCurrentFields: EventHandler = (payload, event) => {
   const toStatusName = payload.issue?.fields?.status?.name;
   if (!toStatusName) return { kind: 'ignored', event, reason: 'missing_status' };
@@ -120,7 +127,9 @@ const fromChangelog: EventHandler = (payload, event) => {
     kind: 'changes',
     event,
     transition: toStatusName ? buildTransition(payload, toStatusName, statusItem) : null,
-    assignment: assigneeItem ? buildAssignment(payload, assigneeItem) : null,
+    assignment: assigneeItem
+      ? buildAssignment(payload, assigneeItem)
+      : assignmentFromCurrentFields(payload),
   };
 };
 

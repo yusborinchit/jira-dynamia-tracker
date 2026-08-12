@@ -1,7 +1,7 @@
 import { SegmentTooltip } from '@/components/SegmentTooltip';
 import { useTooltip } from '@/components/Tooltip';
 import type { MatchFn } from '@/lib/filters';
-import type { Issue, MonthlyReport } from '@/lib/report';
+import { type Issue, isBlip, type MonthlyReport } from '@/lib/report';
 
 interface Block {
   issue: Issue;
@@ -150,7 +150,7 @@ function collectBlocks(report: MonthlyReport): Omit<Block, 'lane'>[] {
 
   for (const issue of report.issues) {
     for (const segment of issue.segments) {
-      if (segment.terminal) continue;
+      if (segment.terminal || isBlip(segment)) continue;
       segment.work_intervals.forEach((interval, index) => {
         blocks.push({
           issue,

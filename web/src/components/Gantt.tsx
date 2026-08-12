@@ -12,6 +12,7 @@ import type { MatchFn } from '@/lib/filters';
 import {
   formatDuration,
   type Issue,
+  isBlip,
   type MonthlyReport,
   type Segment,
   spansOf,
@@ -55,7 +56,7 @@ function SegmentBars({
   onSelect?: () => void;
 }) {
   const tooltip = useTooltip();
-  if (segment.terminal || segment.work_intervals.length === 0) return null;
+  if (segment.terminal || segment.work_intervals.length === 0 || isBlip(segment)) return null;
 
   const bind = tooltip(
     <SegmentTooltip
