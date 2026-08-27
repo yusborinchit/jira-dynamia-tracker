@@ -1,8 +1,11 @@
 import type { AssigneeHistoryRow } from '@/db/schema';
 import { CATEGORY_COLORS, isTerminalCategory, UNCATEGORIZED_COLOR } from '@/db/status-mapping.data';
-import { findAssignmentsOverlapping } from '@/repositories/assignment.repository';
+import {
+  findAssignmentsOverlapping,
+  listKnownAssignees,
+} from '@/repositories/assignment.repository';
 import { findSegmentsOverlapping } from '@/repositories/history.repository';
-import { listIssuesByKeys } from '@/repositories/issue.repository';
+import { listIssues, listIssuesByKeys } from '@/repositories/issue.repository';
 import { loadCategoryResolver, UNCATEGORIZED } from '@/repositories/status.repository';
 import {
   intersectWorkIntervals,
@@ -69,9 +72,20 @@ export interface Report {
   totals_by_assignee: Record<string, number>;
   assignee_names: Record<string, string>;
   assignee_avatars: Record<string, string>;
+  team_members: TeamMember[];
   category_colors: Record<string, string>;
   work_schedule: WorkSchedule;
   work_intervals: WorkInterval[];
+}
+
+export interface TeamMember {
+  account_id: string;
+  display_name: string;
+  avatar_url: string | null;
+  development_issues: {
+    issue_key: string;
+    summary: string | null;
+  }[];
 }
 
 export interface MonthlyReport extends Report {
@@ -138,6 +152,45 @@ export function buildReport(range: Range, now = Date.now()): Report {
   const resolver = loadCategoryResolver();
   const rows = findSegmentsOverlapping(range, now);
 
+  const teamById = new Map<string, TeamMember>();
+  for (const assignment of listKnownAssignees()) {
+    if (!assignment.accountId || teamById.has(assignment.accountId)) continue;
+    teamById.set(assignment.accountId, {
+      account_id: assignment.accountId,
+      display_name: assignment.displayName ?? assignment.accountId,
+      avatar_url: assignment.avatarUrl,
+      development_issues: [],
+    });
+  }
+
+  for (const issue of listIssues()) {
+    if (!issue.currentAssigneeId) continue;
+    let member = teamById.get(issue.currentAssigneeId);
+    if (!member) {
+      member = {
+        account_id: issue.currentAssigneeId,
+        display_name: issue.currentAssigneeName ?? issue.currentAssigneeId,
+        avatar_url: issue.currentAssigneeAvatar,
+        development_issues: [],
+      };
+      teamById.set(issue.currentAssigneeId, member);
+    }
+
+    if (issue.currentAssigneeName) member.display_name = issue.currentAssigneeName;
+    if (issue.currentAssigneeAvatar) member.avatar_url = issue.currentAssigneeAvatar;
+    if (resolver.resolve(issue.currentStatusId, issue.currentStatusName) === 'development') {
+      member.development_issues.push({
+        issue_key: issue.issueKey,
+        summary: issue.summary,
+      });
+    }
+  }
+
+  const teamMembers = [...teamById.values()].sort((a, b) => {
+    const byWork = a.development_issues.length - b.development_issues.length;
+    return byWork || a.display_name.localeCompare(b.display_name, 'es');
+  });
+
   const assignmentsByIssue = new Map<string, AssigneeHistoryRow[]>();
   const assigneeNames: Record<string, string> = { [UNASSIGNED]: UNASSIGNED_LABEL };
   const assigneeAvatars: Record<string, string> = {};
@@ -150,6 +203,11 @@ export function buildReport(range: Range, now = Date.now()): Report {
     if (!assignment.accountId) continue;
     if (assignment.displayName) assigneeNames[assignment.accountId] = assignment.displayName;
     if (assignment.avatarUrl) assigneeAvatars[assignment.accountId] = assignment.avatarUrl;
+  }
+
+  for (const member of teamMembers) {
+    assigneeNames[member.account_id] = member.display_name;
+    if (member.avatar_url) assigneeAvatars[member.account_id] = member.avatar_url;
   }
 
   const byIssue = new Map<string, MonthlyIssue>();
@@ -266,6 +324,7 @@ export function buildReport(range: Range, now = Date.now()): Report {
     totals_by_assignee: totalsByAssignee,
     assignee_names: assigneeNames,
     assignee_avatars: assigneeAvatars,
+    team_members: teamMembers,
     category_colors: { ...CATEGORY_COLORS, [UNCATEGORIZED]: UNCATEGORIZED_COLOR },
     work_schedule: describeWorkSchedule(),
     work_intervals: workIntervals.map((interval) => ({

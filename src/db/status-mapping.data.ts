@@ -1,10 +1,10 @@
 export const STATUS_CATEGORIES = {
-  pending: ['Backlog', 'To Do', 'Por hacer', 'Estimar'],
+  pending: ['Backlog', 'To Do', 'Por hacer', 'Estimar', 'Open'],
   waiting_info: ['Pendiente de info', 'Pending for info'],
   development: ['En curso', 'In Progress'],
   deploy: ['To Deploy'],
-  testing: ['Testing', 'Validar'],
-  done: ['Listo', 'Done', 'Hecho'],
+  testing: ['Testing', 'Validar', 'Ready to Test'],
+  done: ['Listo', 'Done', 'Hecho', 'Closed'],
 } as const satisfies Record<string, readonly string[]>;
 
 export type Category = keyof typeof STATUS_CATEGORIES;

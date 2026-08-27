@@ -60,9 +60,20 @@ export interface MonthlyReport {
   totals_by_assignee: Record<string, number>;
   assignee_names: Record<string, string>;
   assignee_avatars: Record<string, string>;
+  team_members: TeamMember[];
   category_colors: Record<string, string>;
   work_schedule: WorkSchedule;
   work_intervals: WorkInterval[];
+}
+
+export interface TeamMember {
+  account_id: string;
+  display_name: string;
+  avatar_url: string | null;
+  development_issues: {
+    issue_key: string;
+    summary: string | null;
+  }[];
 }
 
 async function fetchReport(date: string, span: Span): Promise<MonthlyReport> {

@@ -1,4 +1,4 @@
-import { and, asc, eq, gt, isNull, lt, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, isNull, lt, sql } from 'drizzle-orm';
 
 import { type DbClient, db } from '@/db/db';
 import { type AssigneeHistoryRow, assigneeHistory } from '@/db/schema';
@@ -59,5 +59,14 @@ export function findAssignmentsOverlapping(
       ),
     )
     .orderBy(asc(assigneeHistory.issueKey), asc(assigneeHistory.enteredAt))
+    .all();
+}
+
+export function listKnownAssignees(client: DbClient = db): AssigneeHistoryRow[] {
+  return client
+    .select()
+    .from(assigneeHistory)
+    .where(sql`${assigneeHistory.accountId} is not null`)
+    .orderBy(desc(assigneeHistory.enteredAt))
     .all();
 }

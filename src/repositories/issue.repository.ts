@@ -60,3 +60,7 @@ export function listIssuesByKeys(issueKeys: string[], client: DbClient = db): Is
   if (issueKeys.length === 0) return [];
   return client.select().from(issues).where(inArray(issues.issueKey, issueKeys)).all();
 }
+
+export function listIssues(client: DbClient = db): Issue[] {
+  return client.select().from(issues).all();
+}

@@ -11,7 +11,7 @@ services:
       LOG_WEBHOOK_BODY: ${LOG_WEBHOOK_BODY:-true}
       LOG_LEVEL: ${LOG_LEVEL:-info}
     volumes:
-      - jira-tracker-data:/data
+      - '${DATABASE_VOLUME:-jira-tracker-data}:/data:Z'
 
 volumes:
   jira-tracker-data:

@@ -85,6 +85,7 @@ interface FilterBarProps {
   categoryTotals: Record<string, number> | undefined;
   assigneeTotals: Record<string, number> | undefined;
   onExport: (() => Promise<void>) | undefined;
+  showCategories?: boolean;
   onChange: (next: {
     date?: string;
     span?: Span;
@@ -109,6 +110,7 @@ export function FilterBar({
   categoryTotals,
   assigneeTotals,
   onExport,
+  showCategories = true,
   onChange,
 }: FilterBarProps) {
   const [isExporting, setIsExporting] = useState(false);
@@ -224,7 +226,7 @@ export function FilterBar({
         </div>
       )}
 
-      {availableCategories.length > 0 && report && (
+      {showCategories && availableCategories.length > 0 && report && (
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="mr-1 text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
             Categoría

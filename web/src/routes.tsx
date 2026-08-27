@@ -8,13 +8,19 @@ import {
   useSearch,
 } from '@tanstack/react-router';
 import { z } from 'zod';
-
+import {
+  ContinuityView,
+  continuityTargets,
+  defaultContinuityTarget,
+} from '@/components/ContinuityView';
 import { DayView } from '@/components/DayView';
 import { FilterBar } from '@/components/FilterBar';
 import { Gantt } from '@/components/Gantt';
 import { IssueTable } from '@/components/IssueTable';
+import { TeamStatus } from '@/components/TeamStatus';
 import { TimelineLegend } from '@/components/TimelineLegend';
 import { TooltipProvider } from '@/components/Tooltip';
+import type { ContinuityTarget } from '@/lib/continuity';
 import { downloadReportExcel } from '@/lib/excel';
 import { applyFilters, isFiltered } from '@/lib/filters';
 import { type LiveStatus, useLiveReports } from '@/lib/live';
@@ -37,6 +43,8 @@ const searchSchema = z.object({
   categories: z.array(z.string()).optional(),
   assignees: z.array(z.string()).optional(),
   search: z.string().optional(),
+  view: z.enum(['issues', 'continuity']).optional(),
+  focus: z.string().optional(),
 });
 
 const rootRoute = createRootRoute({
@@ -87,6 +95,7 @@ function Dashboard() {
     assignees: search.assignees ?? [],
     search: search.search ?? '',
   };
+  const timelineView = search.view ?? 'issues';
 
   const { data, isPending, isError, error, isFetching } = useQuery(reportQuery(date, span));
   const liveStatus = useLiveReports();
@@ -98,6 +107,8 @@ function Dashboard() {
     categories?: string[];
     assignees?: string[];
     search?: string;
+    view?: 'issues' | 'continuity';
+    focus?: string;
   }) => {
     navigate({
       search: (previous) => {
@@ -109,14 +120,32 @@ function Dashboard() {
           categories: merged.categories?.length ? merged.categories : undefined,
           assignees: merged.assignees?.length ? merged.assignees : undefined,
           search: merged.search ? merged.search : undefined,
+          view: merged.view === 'continuity' ? merged.view : undefined,
+          focus: merged.focus ? merged.focus : undefined,
         };
       },
       replace: true,
     });
   };
 
-  const view = data ? applyFilters(data, filters) : undefined;
+  const effectiveFilters = timelineView === 'continuity' ? { ...filters, categories: [] } : filters;
+  const view = data ? applyFilters(data, effectiveFilters) : undefined;
   const highlight = isFiltered(filters) ? view?.matches : undefined;
+  const fallbackTarget = data ? defaultContinuityTarget(data) : null;
+  const requestedTarget: ContinuityTarget | null = search.focus
+    ? {
+        kind: search.focus.startsWith('status:') ? 'status' : 'category',
+        value: search.focus.slice(search.focus.indexOf(':') + 1),
+      }
+    : null;
+  const focusTarget =
+    data &&
+    requestedTarget &&
+    continuityTargets(data).some(
+      (target) => target.kind === requestedTarget.kind && target.value === requestedTarget.value,
+    )
+      ? requestedTarget
+      : fallbackTarget;
 
   return (
     <div className="mx-auto flex max-w-[1400px] flex-col gap-6 p-6">
@@ -128,6 +157,10 @@ function Dashboard() {
             <LiveIndicator status={liveStatus} />
           </div>
         </div>
+
+        {data && (
+          <TeamStatus report={data} onSelectIssue={(issueKey) => update({ search: issueKey })} />
+        )}
 
         <FilterBar
           report={data}
@@ -145,6 +178,7 @@ function Dashboard() {
           onExport={
             view ? () => downloadReportExcel(view.report, filters, view.matches) : undefined
           }
+          showCategories={timelineView === 'issues'}
           onChange={update}
         />
       </header>
@@ -166,16 +200,54 @@ function Dashboard() {
           ) : (
             <>
               <section>
-                <h2 className="mb-1 text-sm font-semibold tracking-tight">
-                  {TIMELINE_TITLE[span]}
-                </h2>
-                <TimelineLegend report={data} span={span} />
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                  <h2 className="text-sm font-semibold tracking-tight">
+                    {timelineView === 'continuity'
+                      ? 'Continuidad del trabajo'
+                      : TIMELINE_TITLE[span]}
+                  </h2>
+                  <fieldset
+                    className="inline-flex rounded-md border border-slate-300 p-0.5"
+                    aria-label="Vista de cronología"
+                  >
+                    {(
+                      [
+                        ['issues', 'Por issue'],
+                        ['continuity', 'Continuidad'],
+                      ] as const
+                    ).map(([value, label]) => (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => update({ view: value })}
+                        className={`rounded px-2.5 py-1 text-xs transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-500 ${
+                          timelineView === value
+                            ? 'bg-slate-800 text-white'
+                            : 'text-slate-600 hover:bg-slate-100'
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </fieldset>
+                </div>
+                {timelineView === 'issues' && <TimelineLegend report={data} span={span} />}
                 {view.matchedIssues === 0 && (
                   <p className="pb-2 text-xs text-slate-500">
-                    Ningún issue coincide con el filtro; se muestra todo atenuado.
+                    {timelineView === 'continuity'
+                      ? 'Ningún issue coincide con los filtros; no hay continuidad para mostrar.'
+                      : 'Ningún issue coincide con el filtro; se muestra todo atenuado.'}
                   </p>
                 )}
-                {span === 'day' ? (
+                {timelineView === 'continuity' && focusTarget ? (
+                  <ContinuityView
+                    report={view.report}
+                    target={focusTarget}
+                    matches={view.matches}
+                    assignees={filters.assignees}
+                    onTargetChange={(target) => update({ focus: `${target.kind}:${target.value}` })}
+                  />
+                ) : span === 'day' ? (
                   <DayView report={view.report} matches={highlight} />
                 ) : (
                   <Gantt

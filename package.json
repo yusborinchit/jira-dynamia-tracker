@@ -15,8 +15,9 @@
     "db:mapping": "tsx src/db/load-status-mapping.ts",
     "db:studio": "drizzle-kit studio",
     "typecheck": "tsc --noEmit && pnpm --filter @jira-tracker/web typecheck",
-    "lint": "biome check src web/src",
-    "format": "biome check --write src web/src"
+    "lint": "biome check src web/src tests",
+    "test": "tsx --test tests/*.test.ts",
+    "format": "biome check --write src web/src tests"
   },
   "keywords": [],
   "author": "",
