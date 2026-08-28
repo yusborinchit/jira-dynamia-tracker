@@ -8,86 +8,66 @@ export function TeamStatus({
   report: MonthlyReport;
   onSelectIssue: (issueKey: string) => void;
 }) {
-  const membersWithoutWork = report.team_members.filter(
-    (member) => member.development_issues.length === 0,
-  ).length;
+  const activeMembers = report.team_members.filter(
+    (member) => member.development_issues.length > 0,
+  );
+  const activeTasks = activeMembers.reduce(
+    (total, member) => total + member.development_issues.length,
+    0,
+  );
 
   return (
     <section aria-labelledby="team-status-title">
-      <div className="mb-2 flex flex-wrap items-end justify-between gap-2">
-        <div>
+      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+        <div className="flex items-baseline gap-2.5">
           <h2 id="team-status-title" className="text-sm font-semibold tracking-tight">
             Trabajo actual del equipo
           </h2>
-          <p className="mt-0.5 text-xs text-slate-500">
-            Tareas asignadas que están actualmente en desarrollo.
-          </p>
+          {activeTasks > 0 && (
+            <span className="text-[11px] font-medium text-slate-400">
+              {activeTasks} {activeTasks === 1 ? 'tarea en progreso' : 'tareas en progreso'}
+            </span>
+          )}
         </div>
-        {membersWithoutWork > 0 && (
-          <p className="rounded-full bg-red-100 px-2.5 py-1 text-xs font-bold text-red-700">
-            {membersWithoutWork}{' '}
-            {membersWithoutWork === 1 ? 'integrante sin tarea' : 'integrantes sin tarea'}
-          </p>
-        )}
+        <span className="text-[11px] text-slate-400">Estado actual · Desarrollo</span>
       </div>
 
-      {report.team_members.length === 0 ? (
-        <div className="border border-dashed border-slate-300 px-4 py-5 text-center text-xs text-slate-500">
-          Todavía no hay integrantes registrados.
+      {activeMembers.length === 0 ? (
+        <div className="border-y border-slate-200 py-4 text-center">
+          <p className="text-sm font-medium text-slate-600">Nadie tiene tareas en progreso</p>
+          <p className="mt-1 text-xs text-slate-400">
+            Cuando se asigne una tarea en desarrollo, aparecerá aquí.
+          </p>
         </div>
       ) : (
-        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-          {report.team_members.map((member) => {
-            const idle = member.development_issues.length === 0;
-            return (
-              <article
-                key={member.account_id}
-                className={`min-w-0 border p-3 ${
-                  idle ? 'border-red-300 bg-red-50' : 'border-slate-200 bg-slate-50'
-                }`}
-              >
-                <div className="flex items-start gap-2.5">
-                  <Avatar report={report} assignee={member.account_id} size={32} />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
-                      <h3 className="truncate text-sm font-semibold text-slate-900">
-                        {member.display_name}
-                      </h3>
-                      <span
-                        className={`text-[10px] font-bold tracking-wide uppercase ${
-                          idle ? 'text-red-700' : 'text-emerald-700'
-                        }`}
-                      >
-                        {idle ? 'Sin tarea' : 'En desarrollo'}
+        <div className="grid gap-x-8 gap-y-3 sm:grid-cols-2 xl:grid-cols-3">
+          {activeMembers.map((member) => (
+            <div key={member.account_id} className="min-w-0 border-l-2 border-emerald-500 pl-3">
+              <div className="flex min-w-0 items-center gap-2">
+                <Avatar report={report} assignee={member.account_id} size={26} />
+                <h3 className="truncate text-sm font-semibold text-slate-800">
+                  {member.display_name}
+                </h3>
+              </div>
+              <ul className="mt-1.5 space-y-0.5 pl-8">
+                {member.development_issues.map((issue) => (
+                  <li key={issue.issue_key} className="min-w-0 text-xs text-slate-600">
+                    <button
+                      type="button"
+                      className="w-full truncate text-left hover:text-slate-950 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-500"
+                      title={`${issue.issue_key}${issue.summary ? ` · ${issue.summary}` : ''}`}
+                      onClick={() => onSelectIssue(issue.issue_key)}
+                    >
+                      <span className="font-mono font-semibold text-slate-700">
+                        {issue.issue_key}
                       </span>
-                    </div>
-
-                    {idle ? (
-                      <p className="mt-2 text-sm font-bold text-red-700">
-                        No tiene ninguna tarea en desarrollo
-                      </p>
-                    ) : (
-                      <ul className="mt-1.5 space-y-1">
-                        {member.development_issues.map((issue) => (
-                          <li key={issue.issue_key} className="min-w-0 text-xs text-slate-700">
-                            <button
-                              type="button"
-                              className="w-full truncate text-left hover:text-slate-950 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-500"
-                              title={`${issue.issue_key}${issue.summary ? ` · ${issue.summary}` : ''}`}
-                              onClick={() => onSelectIssue(issue.issue_key)}
-                            >
-                              <span className="font-mono font-semibold">{issue.issue_key}</span>
-                              {issue.summary ? ` · ${issue.summary}` : ''}
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                </div>
-              </article>
-            );
-          })}
+                      {issue.summary ? ` · ${issue.summary}` : ''}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
         </div>
       )}
     </section>
