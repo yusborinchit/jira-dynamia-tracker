@@ -6,7 +6,7 @@ import {
   tableFeatures,
   useTable,
 } from '@tanstack/react-table';
-import { useMemo, useState } from 'react';
+import { memo, useMemo, useState } from 'react';
 
 import { Avatar } from '@/components/Avatar';
 import type { MatchFn } from '@/lib/filters';
@@ -44,7 +44,7 @@ function StatusChip({ issue, report }: { issue: Issue; report: MonthlyReport }) 
       }`}
     >
       <span
-        className="size-2.5 flex-none rounded-sm"
+        className="size-2.5 flex-none rounded-none"
         style={{ background: categoryColor(report, category) }}
       />
       {categoryLabel(category)}
@@ -73,7 +73,7 @@ function CategoryChips({
           }`}
         >
           <span
-            className="size-2.5 flex-none rounded-sm"
+            className="size-2.5 flex-none rounded-none"
             style={{ background: colors[category] ?? '#ec4899' }}
           />
           {categoryLabel(category)} {formatDuration(seconds)}
@@ -83,7 +83,13 @@ function CategoryChips({
   );
 }
 
-export function IssueTable({ report, matches }: { report: MonthlyReport; matches?: MatchFn }) {
+export const IssueTable = memo(function IssueTable({
+  report,
+  matches,
+}: {
+  report: MonthlyReport;
+  matches?: MatchFn;
+}) {
   const [sorting, setSorting] = useState<SortingState>([{ id: 'current_category', desc: false }]);
 
   const columns = useMemo(
@@ -209,7 +215,7 @@ export function IssueTable({ report, matches }: { report: MonthlyReport; matches
             return (
               <tr
                 key={row.id}
-                className={`transition-opacity ${
+                className={`${
                   highlighted ? 'bg-blue-50/70 hover:bg-blue-100/60' : 'hover:bg-slate-50'
                 } ${matches && !matches(row.original.issue_key) ? 'opacity-30' : ''}`}
               >
@@ -230,4 +236,4 @@ export function IssueTable({ report, matches }: { report: MonthlyReport; matches
       </table>
     </div>
   );
-}
+});

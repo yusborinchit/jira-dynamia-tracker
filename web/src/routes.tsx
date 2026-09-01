@@ -7,6 +7,7 @@ import {
   useNavigate,
   useSearch,
 } from '@tanstack/react-router';
+import { useCallback, useDeferredValue, useMemo } from 'react';
 import { z } from 'zod';
 import {
   ContinuityView,
@@ -18,6 +19,7 @@ import { FilterBar } from '@/components/FilterBar';
 import { Gantt } from '@/components/Gantt';
 import { IssueTable } from '@/components/IssueTable';
 import { TeamStatus } from '@/components/TeamStatus';
+import { ThemeToggle } from '@/components/ThemeToggle';
 import { TimelineLegend } from '@/components/TimelineLegend';
 import { TooltipProvider } from '@/components/Tooltip';
 import type { ContinuityTarget } from '@/lib/continuity';
@@ -40,8 +42,11 @@ const searchSchema = z.object({
     .optional(),
   span: z.enum(['day', 'month']).optional(),
   projects: z.array(z.string()).optional(),
+  excludedProjects: z.array(z.string()).optional(),
   categories: z.array(z.string()).optional(),
+  excludedCategories: z.array(z.string()).optional(),
   assignees: z.array(z.string()).optional(),
+  excludedAssignees: z.array(z.string()).optional(),
   search: z.string().optional(),
   view: z.enum(['issues', 'continuity']).optional(),
   focus: z.string().optional(),
@@ -50,7 +55,7 @@ const searchSchema = z.object({
 const rootRoute = createRootRoute({
   component: () => (
     <TooltipProvider>
-      <div className="min-h-screen bg-white text-slate-900">
+      <div className="theme-shell min-h-screen bg-white text-slate-900">
         <Outlet />
       </div>
     </TooltipProvider>
@@ -77,7 +82,7 @@ const LIVE_DOT: Record<LiveStatus, string> = {
 function LiveIndicator({ status }: { status: LiveStatus }) {
   return (
     <span className="flex items-center gap-1.5 text-xs text-slate-400">
-      <span className={`size-1.5 rounded-full ${LIVE_DOT[status]}`} />
+      <span className={`size-1.5 rounded-none ${LIVE_DOT[status]}`} />
       {LIVE_LABEL[status]}
     </span>
   );
@@ -89,48 +94,94 @@ function Dashboard() {
 
   const date = search.date ?? currentDate();
   const span: Span = search.span ?? 'month';
-  const filters = {
-    projects: search.projects ?? [],
-    categories: search.categories ?? [],
-    assignees: search.assignees ?? [],
-    search: search.search ?? '',
-  };
+  const filters = useMemo(
+    () => ({
+      projects: search.projects ?? [],
+      excludedProjects: search.excludedProjects ?? [],
+      categories: search.categories ?? [],
+      excludedCategories: search.excludedCategories ?? [],
+      assignees: search.assignees ?? [],
+      excludedAssignees: search.excludedAssignees ?? [],
+      search: search.search ?? '',
+    }),
+    [
+      search.assignees,
+      search.categories,
+      search.excludedAssignees,
+      search.excludedCategories,
+      search.excludedProjects,
+      search.projects,
+      search.search,
+    ],
+  );
+  const deferredFilters = useDeferredValue(filters);
   const timelineView = search.view ?? 'issues';
 
   const { data, isPending, isError, error, isFetching } = useQuery(reportQuery(date, span));
   const liveStatus = useLiveReports();
 
-  const update = (next: {
-    date?: string;
-    span?: Span;
-    projects?: string[];
-    categories?: string[];
-    assignees?: string[];
-    search?: string;
-    view?: 'issues' | 'continuity';
-    focus?: string;
-  }) => {
-    navigate({
-      search: (previous) => {
-        const merged = { ...previous, ...next };
-        return {
-          date: merged.date ?? date,
-          span: merged.span,
-          projects: merged.projects?.length ? merged.projects : undefined,
-          categories: merged.categories?.length ? merged.categories : undefined,
-          assignees: merged.assignees?.length ? merged.assignees : undefined,
-          search: merged.search ? merged.search : undefined,
-          view: merged.view === 'continuity' ? merged.view : undefined,
-          focus: merged.focus ? merged.focus : undefined,
-        };
-      },
-      replace: true,
-    });
-  };
+  const update = useCallback(
+    (next: {
+      date?: string;
+      span?: Span;
+      projects?: string[];
+      excludedProjects?: string[];
+      categories?: string[];
+      excludedCategories?: string[];
+      assignees?: string[];
+      excludedAssignees?: string[];
+      search?: string;
+      view?: 'issues' | 'continuity';
+      focus?: string;
+    }) => {
+      navigate({
+        search: (previous) => {
+          const merged = { ...previous, ...next };
+          return {
+            date: merged.date ?? date,
+            span: merged.span,
+            projects: merged.projects?.length ? merged.projects : undefined,
+            excludedProjects: merged.excludedProjects?.length ? merged.excludedProjects : undefined,
+            categories: merged.categories?.length ? merged.categories : undefined,
+            excludedCategories: merged.excludedCategories?.length
+              ? merged.excludedCategories
+              : undefined,
+            assignees: merged.assignees?.length ? merged.assignees : undefined,
+            excludedAssignees: merged.excludedAssignees?.length
+              ? merged.excludedAssignees
+              : undefined,
+            search: merged.search ? merged.search : undefined,
+            view: merged.view === 'continuity' ? merged.view : undefined,
+            focus: merged.focus ? merged.focus : undefined,
+          };
+        },
+        replace: true,
+      });
+    },
+    [date, navigate],
+  );
 
-  const effectiveFilters = timelineView === 'continuity' ? { ...filters, categories: [] } : filters;
-  const view = data ? applyFilters(data, effectiveFilters) : undefined;
-  const highlight = isFiltered(filters) ? view?.matches : undefined;
+  const effectiveFilters = useMemo(
+    () =>
+      timelineView === 'continuity'
+        ? { ...deferredFilters, categories: [], excludedCategories: [] }
+        : deferredFilters,
+    [deferredFilters, timelineView],
+  );
+  const view = useMemo(
+    () => (data ? applyFilters(data, effectiveFilters) : undefined),
+    [data, effectiveFilters],
+  );
+  const highlight = isFiltered(deferredFilters) ? view?.matches : undefined;
+  const timelineReport =
+    view && (deferredFilters.assignees.length > 0 || deferredFilters.excludedAssignees.length > 0)
+      ? view.report
+      : data;
+  const selectIssue = useCallback((issueKey: string) => update({ search: issueKey }), [update]);
+  const changeFocus = useCallback(
+    (target: ContinuityTarget) => update({ focus: `${target.kind}:${target.value}` }),
+    [update],
+  );
   const fallbackTarget = data ? defaultContinuityTarget(data) : null;
   const requestedTarget: ContinuityTarget | null = search.focus
     ? {
@@ -155,20 +206,22 @@ function Dashboard() {
           <div className="flex items-center gap-3">
             {isFetching && <span className="text-xs text-slate-400">actualizando…</span>}
             <LiveIndicator status={liveStatus} />
+            <ThemeToggle />
           </div>
         </div>
 
-        {data && (
-          <TeamStatus report={data} onSelectIssue={(issueKey) => update({ search: issueKey })} />
-        )}
+        {data && <TeamStatus report={data} onSelectIssue={selectIssue} />}
 
         <FilterBar
           report={data}
           date={date}
           span={span}
           projects={filters.projects}
+          excludedProjects={filters.excludedProjects}
           categories={filters.categories}
+          excludedCategories={filters.excludedCategories}
           assignees={filters.assignees}
+          excludedAssignees={filters.excludedAssignees}
           search={filters.search}
           availableProjects={data ? allProjects(data) : []}
           availableCategories={data ? allCategories(data) : []}
@@ -176,7 +229,7 @@ function Dashboard() {
           categoryTotals={view?.report.totals_by_category}
           assigneeTotals={view?.report.totals_by_assignee}
           onExport={
-            view ? () => downloadReportExcel(view.report, filters, view.matches) : undefined
+            view ? () => downloadReportExcel(view.report, deferredFilters, view.matches) : undefined
           }
           showCategories={timelineView === 'issues'}
           onChange={update}
@@ -207,7 +260,7 @@ function Dashboard() {
                       : TIMELINE_TITLE[span]}
                   </h2>
                   <fieldset
-                    className="inline-flex rounded-md border border-slate-300 p-0.5"
+                    className="inline-flex rounded-none border border-slate-300 p-0.5"
                     aria-label="Vista de cronología"
                   >
                     {(
@@ -220,7 +273,7 @@ function Dashboard() {
                         key={value}
                         type="button"
                         onClick={() => update({ view: value })}
-                        className={`rounded px-2.5 py-1 text-xs transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-500 ${
+                        className={`rounded-none px-2.5 py-1 text-xs transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-500 ${
                           timelineView === value
                             ? 'bg-slate-800 text-white'
                             : 'text-slate-600 hover:bg-slate-100'
@@ -244,23 +297,19 @@ function Dashboard() {
                     report={view.report}
                     target={focusTarget}
                     matches={view.matches}
-                    assignees={filters.assignees}
-                    onTargetChange={(target) => update({ focus: `${target.kind}:${target.value}` })}
+                    assignees={deferredFilters.assignees}
+                    onTargetChange={changeFocus}
                   />
-                ) : span === 'day' ? (
-                  <DayView report={view.report} matches={highlight} />
-                ) : (
-                  <Gantt
-                    report={view.report}
-                    matches={highlight}
-                    onSelectIssue={(issueKey) => update({ search: issueKey })}
-                  />
-                )}
+                ) : span === 'day' && timelineReport ? (
+                  <DayView report={timelineReport} matches={highlight} />
+                ) : timelineReport ? (
+                  <Gantt report={timelineReport} matches={highlight} onSelectIssue={selectIssue} />
+                ) : null}
               </section>
 
               <section>
                 <h2 className="mb-2 text-sm font-semibold tracking-tight">Detalle por issue</h2>
-                <IssueTable report={view.report} matches={highlight} />
+                {timelineReport && <IssueTable report={timelineReport} matches={highlight} />}
               </section>
             </>
           )}

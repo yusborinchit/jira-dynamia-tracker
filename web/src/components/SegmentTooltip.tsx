@@ -56,7 +56,7 @@ export function SegmentTooltip({
       <div className="flex flex-col gap-1 border-t border-slate-700 pt-1.5">
         <Line icon={<TagIcon />}>
           <span
-            className="size-2 flex-none rounded-sm"
+            className="size-2 flex-none rounded-none"
             style={{ background: categoryColor(report, category) }}
           />
           <span className="text-white">{categoryLabel(category)}</span>

@@ -14,6 +14,11 @@ import {
 
 const GAP_OPTIONS = [0, 15, 30, 60] as const;
 const CHART_HEIGHT = 132;
+const SHIFT_BREAK_PCT = 3;
+
+function buildContinuityAxis(report: MonthlyReport) {
+  return buildCompressedAxis(report, report.span === 'day' ? SHIFT_BREAK_PCT : 0);
+}
 
 function targetKey(target: ContinuityTarget): string {
   return `${target.kind}:${target.value}`;
@@ -89,7 +94,7 @@ function GapTooltip({ gap, report }: { gap: ContinuityGap; report: MonthlyReport
 }
 
 function AxisLabels({ report }: { report: MonthlyReport }) {
-  const axis = buildCompressedAxis(report);
+  const axis = buildContinuityAxis(report);
 
   if (report.span === 'month') {
     return (
@@ -130,10 +135,16 @@ function AxisLabels({ report }: { report: MonthlyReport }) {
 
   return (
     <div className="relative h-6">
-      {ticks.map((tick) => (
+      {ticks.map((tick, index) => (
         <span
           key={tick}
-          className="absolute -translate-x-1/2 font-mono text-[9px] text-slate-400 tabular-nums"
+          className={`absolute font-mono text-[9px] text-slate-400 tabular-nums ${
+            index === 0
+              ? ''
+              : index === ticks.length - 1
+                ? '-translate-x-full'
+                : '-translate-x-1/2'
+          }`}
           style={{ left: `${projectToAxis(tick, axis)}%` }}
         >
           {hour.format(new Date(tick))}
@@ -169,7 +180,7 @@ export function ContinuityView({
       }),
     [assignees, matches, report, target],
   );
-  const axis = buildCompressedAxis(report);
+  const axis = buildContinuityAxis(report);
   const color =
     target.kind === 'category'
       ? categoryColor(report, target.value)
@@ -203,7 +214,7 @@ export function ContinuityView({
           <select
             value={targetKey(target)}
             onChange={(event) => onTargetChange(parseTarget(event.target.value))}
-            className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-slate-600 focus:ring-2 focus:ring-slate-200"
+            className="rounded-none border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-slate-600 focus:ring-2 focus:ring-slate-200"
           >
             <optgroup label="Categorías">
               {targets
@@ -233,7 +244,7 @@ export function ContinuityView({
           <select
             value={minimumGapMinutes}
             onChange={(event) => setMinimumGapMinutes(Number(event.target.value))}
-            className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-slate-600 focus:ring-2 focus:ring-slate-200"
+            className="rounded-none border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-slate-600 focus:ring-2 focus:ring-slate-200"
           >
             {GAP_OPTIONS.map((minutes) => (
               <option key={minutes} value={minutes}>
@@ -244,7 +255,7 @@ export function ContinuityView({
         </label>
       </div>
 
-      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-slate-200 bg-slate-200 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-none border border-slate-200 bg-slate-200 sm:grid-cols-4">
         {[
           ['Cobertura', `${Math.round(analysis.coverageRatio * 100)}%`],
           [`Huecos ≥ ${minimumGapMinutes} min`, String(gaps.length)],
@@ -263,7 +274,7 @@ export function ContinuityView({
       <div className="overflow-x-auto">
         <div className="min-w-[760px]">
           <AxisLabels report={report} />
-          <div className="relative h-5 overflow-hidden rounded-sm bg-slate-100 ring-1 ring-slate-200">
+          <div className="relative h-5 overflow-hidden rounded-none bg-slate-100 ring-1 ring-slate-200">
             {analysis.coverage.map((span) => {
               const left = projectToAxis(span.from, axis);
               const right = projectToAxis(span.to, axis);
@@ -296,7 +307,7 @@ export function ContinuityView({
           </div>
 
           <div
-            className="relative mt-2 overflow-hidden rounded-md border border-slate-200 bg-slate-50"
+            className="relative mt-2 overflow-hidden rounded-none border border-slate-200 bg-slate-50"
             style={{ height: CHART_HEIGHT }}
           >
             {axis.days.map((day, index) => (
@@ -349,7 +360,7 @@ export function ContinuityView({
                 style={{ left: `${projectToAxis(generatedAt, axis)}%` }}
               />
             )}
-            <div className="absolute top-2 left-2 rounded bg-white/85 px-1.5 py-0.5 font-mono text-[9px] text-slate-500 shadow-sm">
+            <div className="absolute top-2 left-2 rounded-none bg-white/85 px-1.5 py-0.5 font-mono text-[9px] text-slate-500 shadow-sm">
               {analysis.maxConcurrent} máx.
             </div>
           </div>

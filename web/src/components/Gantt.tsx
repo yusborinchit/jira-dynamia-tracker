@@ -1,4 +1,4 @@
-import { Fragment } from 'react';
+import { Fragment, memo, type PointerEvent, type ReactNode, useMemo, useRef } from 'react';
 import { SegmentTooltip } from '@/components/SegmentTooltip';
 import { useTooltip } from '@/components/Tooltip';
 import {
@@ -7,6 +7,7 @@ import {
   isOnAxis,
   projectIntervals,
   projectToAxis,
+  unprojectFromAxis,
 } from '@/lib/axis';
 import type { MatchFn } from '@/lib/filters';
 import {
@@ -22,7 +23,105 @@ const MIN_BAR_PX = 3;
 const BLOCK_GAP_PX = 2;
 const DIMMED_OPACITY = 0.16;
 
-function DayGrid({ axis }: { axis: CompressedAxis }) {
+function formatCrosshairTime(at: number, formatter: Intl.DateTimeFormat): string {
+  const parts = formatter.formatToParts(new Date(at));
+  const value = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value ?? '';
+
+  return `${value('weekday').replace('.', '')} ${value('day')}/${value('month')} · ${value('hour')}:${value('minute')}`;
+}
+
+function GanttRows({
+  axis,
+  timezone,
+  children,
+}: {
+  axis: CompressedAxis;
+  timezone: string;
+  children: ReactNode;
+}) {
+  const plotRef = useRef<HTMLDivElement>(null);
+  const verticalRef = useRef<HTMLDivElement>(null);
+  const horizontalRef = useRef<HTMLDivElement>(null);
+  const labelRef = useRef<HTMLSpanElement>(null);
+  const lastMinuteRef = useRef<number | null>(null);
+  const timeFormatter = useMemo(
+    () =>
+      new Intl.DateTimeFormat('es-UY', {
+        timeZone: timezone,
+        weekday: 'short',
+        day: '2-digit',
+        month: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hourCycle: 'h23',
+      }),
+    [timezone],
+  );
+
+  const hideCrosshair = () => {
+    if (plotRef.current) plotRef.current.style.opacity = '0';
+  };
+
+  const handlePointerMove = (event: PointerEvent<HTMLDivElement>) => {
+    const plot = plotRef.current;
+    const vertical = verticalRef.current;
+    const horizontal = horizontalRef.current;
+    const label = labelRef.current;
+    if (!plot || !vertical || !horizontal || !label) return;
+
+    const rect = plot.getBoundingClientRect();
+
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    if (x < 0 || x > rect.width || y < 0 || y > rect.height) {
+      hideCrosshair();
+      return;
+    }
+
+    const at = unprojectFromAxis((x / rect.width) * 100, axis);
+    const minute = Math.floor(at / 60_000);
+    const placeRight = x < 150;
+    const placeBelow = y < 40;
+
+    plot.style.opacity = '1';
+    vertical.style.transform = `translate3d(${x}px, 0, 0)`;
+    horizontal.style.transform = `translate3d(0, ${y}px, 0)`;
+    label.style.left = `${x}px`;
+    label.style.top = `${y}px`;
+    label.style.transform = `translate(${placeRight ? '8px' : 'calc(-100% - 8px)'}, ${placeBelow ? '8px' : 'calc(-100% - 8px)'})`;
+    if (lastMinuteRef.current !== minute) {
+      label.textContent = formatCrosshairTime(at, timeFormatter);
+      lastMinuteRef.current = minute;
+    }
+  };
+
+  return (
+    <div className="relative" onPointerMove={handlePointerMove} onPointerLeave={hideCrosshair}>
+      {children}
+      <div
+        ref={plotRef}
+        className="pointer-events-none absolute top-0 right-16 bottom-0 left-52 z-30 overflow-hidden opacity-0"
+        aria-hidden="true"
+      >
+        <div
+          ref={verticalRef}
+          className="absolute top-0 bottom-0 left-0 border-l border-dashed border-slate-500/80 will-change-transform"
+        />
+        <div
+          ref={horizontalRef}
+          className="absolute top-0 right-0 left-0 border-t border-dashed border-slate-500/80 will-change-transform"
+        />
+        <span
+          ref={labelRef}
+          className="absolute border border-slate-600 bg-slate-900/97 px-1.5 py-1 font-mono text-[10px] leading-none whitespace-nowrap text-white tabular-nums shadow-xl will-change-transform"
+        />
+      </div>
+    </div>
+  );
+}
+
+const DayGrid = memo(function DayGrid({ axis }: { axis: CompressedAxis }) {
   return (
     <div className="absolute inset-0">
       {axis.days.map((day, index) => (
@@ -36,16 +135,16 @@ function DayGrid({ axis }: { axis: CompressedAxis }) {
       ))}
     </div>
   );
-}
+});
 
-function SegmentBars({
+const SegmentBars = memo(function SegmentBars({
   report,
   issue,
   segment,
   axis,
   color,
   dimmed,
-  onSelect,
+  onSelectIssue,
 }: {
   report: MonthlyReport;
   issue: Issue;
@@ -53,29 +152,37 @@ function SegmentBars({
   axis: CompressedAxis;
   color: string;
   dimmed: boolean;
-  onSelect?: () => void;
+  onSelectIssue?: (issueKey: string) => void;
 }) {
   const tooltip = useTooltip();
-  if (segment.terminal || segment.work_intervals.length === 0 || isBlip(segment)) return null;
-
-  const bind = tooltip(
-    <SegmentTooltip
-      report={report}
-      issue={issue}
-      statusName={segment.status_name}
-      category={segment.category}
-      seconds={segment.seconds}
-      open={segment.open}
-      spans={spansOf(segment.work_intervals)}
-    />,
+  const spans = useMemo(
+    () => projectIntervals(segment.work_intervals, axis),
+    [axis, segment.work_intervals],
   );
+  const tooltipContent = useMemo(
+    () => (
+      <SegmentTooltip
+        report={report}
+        issue={issue}
+        statusName={segment.status_name}
+        category={segment.category}
+        seconds={segment.seconds}
+        open={segment.open}
+        spans={spansOf(segment.work_intervals)}
+      />
+    ),
+    [issue, report, segment],
+  );
+  const bind = useMemo(() => tooltip(tooltipContent), [tooltip, tooltipContent]);
+
+  if (segment.terminal || segment.work_intervals.length === 0 || isBlip(segment)) return null;
 
   return (
     <>
-      {projectIntervals(segment.work_intervals, axis).map((span) => {
+      {spans.map((span) => {
         const classes = [
-          'absolute top-1.5 h-4 rounded-sm transition-opacity',
-          onSelect ? 'cursor-pointer hover:brightness-110' : '',
+          'absolute top-1.5 h-4 rounded-none',
+          onSelectIssue ? 'cursor-pointer hover:brightness-110' : '',
         ]
           .filter(Boolean)
           .join(' ');
@@ -103,12 +210,12 @@ function SegmentBars({
 
         return (
           <Fragment key={span.left}>
-            {onSelect ? (
+            {onSelectIssue ? (
               <button
                 type="button"
                 className={classes}
                 style={style}
-                onClick={onSelect}
+                onClick={() => onSelectIssue(issue.issue_key)}
                 {...bind}
               />
             ) : (
@@ -120,7 +227,7 @@ function SegmentBars({
       })}
     </>
   );
-}
+});
 
 interface GanttProps {
   report: MonthlyReport;
@@ -128,8 +235,8 @@ interface GanttProps {
   onSelectIssue?: (issueKey: string) => void;
 }
 
-export function Gantt({ report, matches, onSelectIssue }: GanttProps) {
-  const axis = buildCompressedAxis(report);
+export const Gantt = memo(function Gantt({ report, matches, onSelectIssue }: GanttProps) {
+  const axis = useMemo(() => buildCompressedAxis(report), [report]);
   const generatedAt = Date.parse(report.generated_at);
   const showNow = isOnAxis(generatedAt, axis);
   const nowPct = projectToAxis(generatedAt, axis);
@@ -160,52 +267,54 @@ export function Gantt({ report, matches, onSelectIssue }: GanttProps) {
           </div>
         </div>
 
-        {report.issues.map((issue: Issue) => (
-          <div key={issue.issue_key} className="flex items-stretch">
-            <div
-              className="flex w-52 flex-none flex-col overflow-hidden py-1.5 pr-2.5 transition-opacity"
-              style={{ opacity: matches && !matches(issue.issue_key) ? 0.35 : 1 }}
-            >
-              <button
-                type="button"
-                className="truncate text-left font-mono text-[11px] font-semibold hover:underline"
-                onClick={() => onSelectIssue?.(issue.issue_key)}
+        <GanttRows axis={axis} timezone={report.work_schedule.timezone}>
+          {report.issues.map((issue: Issue) => (
+            <div key={issue.issue_key} className="flex items-stretch">
+              <div
+                className="flex w-52 flex-none flex-col overflow-hidden py-1.5 pr-2.5 transition-opacity"
+                style={{ opacity: matches && !matches(issue.issue_key) ? 0.35 : 1 }}
               >
-                {issue.issue_key}
-              </button>
-              <span className="truncate text-[11px] text-slate-500" title={issue.summary ?? ''}>
-                {issue.summary ?? ''}
+                <button
+                  type="button"
+                  className="truncate text-left font-mono text-[11px] font-semibold hover:underline"
+                  onClick={() => onSelectIssue?.(issue.issue_key)}
+                >
+                  {issue.issue_key}
+                </button>
+                <span className="truncate text-[11px] text-slate-500" title={issue.summary ?? ''}>
+                  {issue.summary ?? ''}
+                </span>
+              </div>
+              <div className="relative min-h-7 flex-1 cursor-crosshair border-l border-slate-300">
+                <DayGrid axis={axis} />
+                <div className="absolute inset-0">
+                  {issue.segments.map((segment) => (
+                    <SegmentBars
+                      key={`${segment.entered_at}-${segment.status_name}`}
+                      report={report}
+                      issue={issue}
+                      segment={segment}
+                      axis={axis}
+                      color={report.category_colors[segment.category] ?? '#ec4899'}
+                      dimmed={matches !== undefined && !matches(issue.issue_key, segment.category)}
+                      onSelectIssue={onSelectIssue}
+                    />
+                  ))}
+                  {showNow && (
+                    <div
+                      className="absolute top-0 bottom-0 z-10 w-px bg-red-500"
+                      style={{ left: `${nowPct.toFixed(4)}%` }}
+                    />
+                  )}
+                </div>
+              </div>
+              <span className="w-16 flex-none pt-1.5 pl-2 text-right font-mono text-[10px] font-medium text-slate-600 tabular-nums">
+                {formatDuration(issue.total_seconds)}
               </span>
             </div>
-            <div className="relative min-h-7 flex-1 border-l border-slate-300">
-              <DayGrid axis={axis} />
-              <div className="absolute inset-0">
-                {issue.segments.map((segment) => (
-                  <SegmentBars
-                    key={`${segment.entered_at}-${segment.status_name}`}
-                    report={report}
-                    issue={issue}
-                    segment={segment}
-                    axis={axis}
-                    color={report.category_colors[segment.category] ?? '#ec4899'}
-                    dimmed={matches !== undefined && !matches(issue.issue_key, segment.category)}
-                    onSelect={onSelectIssue ? () => onSelectIssue(issue.issue_key) : undefined}
-                  />
-                ))}
-                {showNow && (
-                  <div
-                    className="absolute top-0 bottom-0 z-10 w-px bg-red-500"
-                    style={{ left: `${nowPct.toFixed(4)}%` }}
-                  />
-                )}
-              </div>
-            </div>
-            <span className="w-16 flex-none pt-1.5 pl-2 text-right font-mono text-[10px] font-medium text-slate-600 tabular-nums">
-              {formatDuration(issue.total_seconds)}
-            </span>
-          </div>
-        ))}
+          ))}
+        </GanttRows>
       </div>
     </div>
   );
-}
+});

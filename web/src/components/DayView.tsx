@@ -1,3 +1,4 @@
+import { memo, useMemo } from 'react';
 import { SegmentTooltip } from '@/components/SegmentTooltip';
 import { useTooltip } from '@/components/Tooltip';
 import type { MatchFn } from '@/lib/filters';
@@ -174,16 +175,25 @@ const MIN_BLOCK_PX = 16;
 const BLOCK_GAP_PX = 2;
 const DIMMED_OPACITY = 0.16;
 
-export function DayView({ report, matches }: { report: MonthlyReport; matches?: MatchFn }) {
+export const DayView = memo(function DayView({
+  report,
+  matches,
+}: {
+  report: MonthlyReport;
+  matches?: MatchFn;
+}) {
   const tooltip = useTooltip();
   const timezone = report.work_schedule.timezone;
   const dimmed = (block: Block): boolean =>
     matches !== undefined && !matches(block.issueKey, block.category);
-  const axis = buildHourAxis(report.work_schedule.shifts);
+  const axis = useMemo(
+    () => buildHourAxis(report.work_schedule.shifts),
+    [report.work_schedule.shifts],
+  );
   const start = axis.bands[0]?.startHour ?? 0;
   const end = axis.bands[axis.bands.length - 1]?.endHour ?? 24;
 
-  const blocks = packIntoLanes(collectBlocks(report));
+  const blocks = useMemo(() => packIntoLanes(collectBlocks(report)), [report]);
   const maxLanes = blocks.reduce((max, block) => Math.max(max, block.lane + 1), 1);
   const trackHeight = maxLanes * LANE_HEIGHT;
   const pct = (hour: number): number => projectHour(hour, axis);
@@ -226,7 +236,7 @@ export function DayView({ report, matches }: { report: MonthlyReport; matches?: 
       </div>
 
       <div
-        className="relative rounded-md border border-slate-200 bg-white"
+        className="relative rounded-none border border-slate-200 bg-white"
         style={{ height: trackHeight + 8 }}
       >
         {ticks.map((hour) => (
@@ -284,7 +294,7 @@ export function DayView({ report, matches }: { report: MonthlyReport; matches?: 
             return (
               <div
                 key={`${block.issueKey}-${block.from}-${block.lane}`}
-                className="absolute flex items-center overflow-hidden rounded-sm px-1.5 text-[10px] leading-none text-white/95 transition-opacity"
+                className="absolute flex items-center overflow-hidden rounded-none px-1.5 text-[10px] leading-none text-white/95"
                 style={{
                   opacity: dimmed(block) ? DIMMED_OPACITY : 1,
                   left: `${left}%`,
@@ -315,4 +325,4 @@ export function DayView({ report, matches }: { report: MonthlyReport; matches?: 
       </div>
     </div>
   );
-}
+});

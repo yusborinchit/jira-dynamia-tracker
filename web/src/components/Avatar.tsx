@@ -44,7 +44,7 @@ export function Avatar({
   const unassigned = assignee === UNASSIGNED;
 
   const shared = {
-    className: 'flex-none rounded-full',
+    className: 'flex-none rounded-none',
     style: { width: size, height: size },
     title: name,
   };

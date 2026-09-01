@@ -39,14 +39,14 @@ function periodLabel(date: string, span: Span): string {
 }
 
 function Toggle({
-  active,
+  state,
   color,
   icon,
   label,
   hint,
   onClick,
 }: {
-  active: boolean;
+  state: 'neutral' | 'included' | 'excluded';
   color?: string;
   icon?: ReactNode;
   label: string;
@@ -57,14 +57,22 @@ function Toggle({
     <button
       type="button"
       onClick={onClick}
-      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition ${
-        active
+      data-state={state}
+      aria-label={`${label}: ${
+        state === 'included' ? 'incluido' : state === 'excluded' ? 'excluido' : 'sin filtrar'
+      }`}
+      title="Clic para incluir, excluir o limpiar"
+      className={`inline-flex items-center gap-1.5 rounded-none border px-2.5 py-1 text-xs transition ${
+        state === 'included'
           ? 'border-slate-800 bg-slate-800 text-white'
-          : 'border-slate-300 bg-white text-slate-600 hover:border-slate-400'
+          : state === 'excluded'
+            ? 'border-red-400 bg-white text-red-600'
+            : 'border-slate-300 bg-white text-slate-600 hover:border-slate-400'
       }`}
     >
-      {color && <span className="size-2.5 rounded-sm" style={{ background: color }} />}
+      {color && <span className="size-2.5 rounded-none" style={{ background: color }} />}
       {icon}
+      {state === 'excluded' && <span aria-hidden="true">−</span>}
       {label}
       {hint && <span className="tabular-nums opacity-70">{hint}</span>}
     </button>
@@ -76,8 +84,11 @@ interface FilterBarProps {
   date: string;
   span: Span;
   projects: string[];
+  excludedProjects: string[];
   categories: string[];
+  excludedCategories: string[];
   assignees: string[];
+  excludedAssignees: string[];
   search: string;
   availableProjects: string[];
   availableCategories: string[];
@@ -90,8 +101,11 @@ interface FilterBarProps {
     date?: string;
     span?: Span;
     projects?: string[];
+    excludedProjects?: string[];
     categories?: string[];
+    excludedCategories?: string[];
     assignees?: string[];
+    excludedAssignees?: string[];
     search?: string;
   }) => void;
 }
@@ -101,8 +115,11 @@ export function FilterBar({
   date,
   span,
   projects,
+  excludedProjects,
   categories,
+  excludedCategories,
   assignees,
+  excludedAssignees,
   search,
   availableProjects,
   availableCategories,
@@ -115,8 +132,34 @@ export function FilterBar({
 }: FilterBarProps) {
   const [isExporting, setIsExporting] = useState(false);
 
-  const toggle = (list: string[], value: string): string[] =>
-    list.includes(value) ? list.filter((item) => item !== value) : [...list, value];
+  const cycle = (
+    included: string[],
+    excluded: string[],
+    value: string,
+  ): { included: string[]; excluded: string[] } => {
+    if (excluded.includes(value)) {
+      return {
+        included: included.filter((item) => item !== value),
+        excluded: excluded.filter((item) => item !== value),
+      };
+    }
+    if (included.includes(value)) {
+      return {
+        included: included.filter((item) => item !== value),
+        excluded: [...excluded, value],
+      };
+    }
+    return { included: [...included, value], excluded };
+  };
+
+  const stateOf = (
+    included: readonly string[],
+    excluded: readonly string[],
+    value: string,
+  ): 'neutral' | 'included' | 'excluded' => {
+    if (excluded.includes(value)) return 'excluded';
+    return included.includes(value) ? 'included' : 'neutral';
+  };
 
   const exportToExcel = async () => {
     if (!onExport) return;
@@ -131,13 +174,13 @@ export function FilterBar({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-3">
-        <div className="inline-flex rounded-md border border-slate-300 p-0.5">
+        <div className="inline-flex rounded-none border border-slate-300 p-0.5">
           {SPANS.map((option) => (
             <button
               key={option.value}
               type="button"
               onClick={() => onChange({ span: option.value })}
-              className={`rounded px-2.5 py-1 text-xs transition ${
+              className={`rounded-none px-2.5 py-1 text-xs transition ${
                 span === option.value
                   ? 'bg-slate-800 text-white'
                   : 'text-slate-600 hover:bg-slate-100'
@@ -152,7 +195,7 @@ export function FilterBar({
           <button
             type="button"
             onClick={() => onChange({ date: shiftDate(date, span, -1) })}
-            className="rounded-md border border-slate-300 px-2 py-1 text-sm hover:bg-slate-50"
+            className="rounded-none border border-slate-300 px-2 py-1 text-sm hover:bg-slate-50"
             aria-label="Anterior"
           >
             ←
@@ -163,7 +206,7 @@ export function FilterBar({
           <button
             type="button"
             onClick={() => onChange({ date: shiftDate(date, span, 1) })}
-            className="rounded-md border border-slate-300 px-2 py-1 text-sm hover:bg-slate-50"
+            className="rounded-none border border-slate-300 px-2 py-1 text-sm hover:bg-slate-50"
             aria-label="Siguiente"
           >
             →
@@ -175,14 +218,14 @@ export function FilterBar({
           value={search}
           onChange={(event) => onChange({ search: event.target.value })}
           placeholder="Buscar issue, resumen, estado o persona…"
-          className="min-w-56 flex-1 rounded-md border border-slate-300 px-3 py-1.5 text-sm outline-none focus:border-slate-500"
+          className="min-w-56 flex-1 rounded-none border border-slate-300 px-3 py-1.5 text-sm outline-none focus:border-slate-500"
         />
 
         <button
           type="button"
           onClick={exportToExcel}
           disabled={!onExport || isExporting}
-          className="rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded-none border border-slate-300 px-3 py-1.5 text-sm text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isExporting ? 'Generando…' : 'Descargar Excel'}
         </button>
@@ -196,9 +239,15 @@ export function FilterBar({
           {availableProjects.map((project) => (
             <Toggle
               key={project}
-              active={projects.includes(project)}
+              state={stateOf(projects, excludedProjects, project)}
               label={project}
-              onClick={() => onChange({ projects: toggle(projects, project) })}
+              onClick={() => {
+                const next = cycle(projects, excludedProjects, project);
+                onChange({
+                  projects: next.included,
+                  excludedProjects: next.excluded,
+                });
+              }}
             />
           ))}
         </div>
@@ -210,16 +259,22 @@ export function FilterBar({
             Persona
           </span>
           {availableAssignees.map((assignee) => {
-            const active = assignees.includes(assignee);
+            const state = stateOf(assignees, excludedAssignees, assignee);
             const seconds = assigneeTotals?.[assignee];
             return (
               <Toggle
                 key={assignee}
-                active={active}
+                state={state}
                 icon={<Avatar report={report} assignee={assignee} size={16} />}
                 label={assigneeLabel(report, assignee)}
-                hint={active && seconds ? formatDuration(seconds) : undefined}
-                onClick={() => onChange({ assignees: toggle(assignees, assignee) })}
+                hint={state === 'included' && seconds ? formatDuration(seconds) : undefined}
+                onClick={() => {
+                  const next = cycle(assignees, excludedAssignees, assignee);
+                  onChange({
+                    assignees: next.included,
+                    excludedAssignees: next.excluded,
+                  });
+                }}
               />
             );
           })}
@@ -232,16 +287,22 @@ export function FilterBar({
             Categoría
           </span>
           {availableCategories.map((category) => {
-            const active = categories.includes(category);
+            const state = stateOf(categories, excludedCategories, category);
             const seconds = categoryTotals?.[category];
             return (
               <Toggle
                 key={category}
-                active={active}
+                state={state}
                 color={report.category_colors[category] ?? '#ec4899'}
                 label={categoryLabel(category)}
-                hint={active && seconds ? formatDuration(seconds) : undefined}
-                onClick={() => onChange({ categories: toggle(categories, category) })}
+                hint={state === 'included' && seconds ? formatDuration(seconds) : undefined}
+                onClick={() => {
+                  const next = cycle(categories, excludedCategories, category);
+                  onChange({
+                    categories: next.included,
+                    excludedCategories: next.excluded,
+                  });
+                }}
               />
             );
           })}

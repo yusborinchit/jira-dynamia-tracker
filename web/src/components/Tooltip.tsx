@@ -45,7 +45,7 @@ export function TooltipProvider({ children }: { children: ReactNode }) {
       {state !== null &&
         createPortal(
           <div
-            className="pointer-events-none fixed z-50 rounded-lg border border-slate-700 bg-slate-900/97 px-3 py-2.5 text-[11px] text-white shadow-xl"
+            className="pointer-events-none fixed z-50 rounded-none border border-slate-700 bg-slate-900/97 px-3 py-2.5 text-[11px] text-white shadow-xl"
             style={{
               maxWidth: MAX_WIDTH,
               left: state.x + CURSOR_OFFSET,

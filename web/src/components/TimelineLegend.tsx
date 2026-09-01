@@ -9,7 +9,7 @@ export function TimelineLegend({ report, span }: { report: MonthlyReport; span: 
       </li>
       <li className="flex items-center gap-1.5">
         <span className="inline-flex items-center">
-          <span className="inline-block h-3 w-3 rounded-l-sm bg-slate-400" />
+          <span className="inline-block h-3 w-3 rounded-none bg-slate-400" />
           <span className="inline-block w-5 border-t-2 border-dashed border-slate-400" />
         </span>
         Sigue abierto

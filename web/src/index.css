@@ -7,4 +7,123 @@
 
 html {
   color-scheme: light;
+  background: #ffffff;
+}
+
+body {
+  margin: 0;
+  background: #ffffff;
+}
+
+html,
+body,
+#root,
+.theme-shell {
+  min-height: 100%;
+}
+
+button,
+input,
+select,
+[class*="rounded"] {
+  border-radius: 0;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  background: #0b0f14;
+}
+
+[data-theme="dark"] body,
+[data-theme="dark"] .theme-shell {
+  background: #0b0f14;
+  color: #e7ebf0;
+}
+
+[data-theme="dark"] [class*="bg-white"] {
+  background-color: #0f151c;
+}
+
+[data-theme="dark"] .text-slate-950,
+[data-theme="dark"] .text-slate-900,
+[data-theme="dark"] .text-slate-800 {
+  color: #edf1f5;
+}
+
+[data-theme="dark"] .text-slate-700,
+[data-theme="dark"] .text-slate-600 {
+  color: #c4ccd6;
+}
+
+[data-theme="dark"] .text-slate-500,
+[data-theme="dark"] .text-slate-400 {
+  color: #8793a2;
+}
+
+[data-theme="dark"] [class*="border-slate-"] {
+  border-color: #303a47;
+}
+
+[data-theme="dark"] [class*="ring-slate-"] {
+  --tw-ring-color: #303a47;
+}
+
+[data-theme="dark"] .bg-slate-50,
+[data-theme="dark"] [class*="bg-slate-50/"] {
+  background-color: #121820;
+}
+
+[data-theme="dark"] .bg-slate-100,
+[data-theme="dark"] [class*="bg-slate-100/"] {
+  background-color: #19212b;
+}
+
+[data-theme="dark"] .bg-slate-200,
+[data-theme="dark"] [class*="bg-slate-200/"] {
+  background-color: #25303c;
+}
+
+[data-theme="dark"] [class*="hover:bg-slate-50"]:hover,
+[data-theme="dark"] [class*="hover:bg-slate-100"]:hover {
+  background-color: #1a232e;
+}
+
+[data-theme="dark"] [class*="bg-blue-50"] {
+  background-color: rgb(30 64 175 / 0.18);
+}
+
+[data-theme="dark"] [class*="hover:bg-blue-100"]:hover {
+  background-color: rgb(30 64 175 / 0.28);
+}
+
+[data-theme="dark"] input,
+[data-theme="dark"] select {
+  background: #0d131a;
+  color: #e7ebf0;
+}
+
+[data-theme="dark"] .bg-slate-800 {
+  background-color: #dbe3ec;
+  color: #111820;
+}
+
+[data-theme="dark"] .bg-slate-900\/97 {
+  background-color: rgb(2 6 23 / 0.97);
+}
+
+[data-theme="dark"] .text-red-600 {
+  color: #fb7185;
+}
+
+[data-theme="dark"] .shadow-sm,
+[data-theme="dark"] .shadow-xl {
+  box-shadow: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms;
+  }
 }

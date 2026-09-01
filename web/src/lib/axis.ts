@@ -32,7 +32,7 @@ const WEEKDAY_INITIAL: Record<string, string> = {
   Sun: 'D',
 };
 
-export function buildCompressedAxis(report: MonthlyReport): CompressedAxis {
+export function buildCompressedAxis(report: MonthlyReport, intervalGapPct = 0): CompressedAxis {
   const timezone = report.work_schedule.timezone;
   const dateFmt = new Intl.DateTimeFormat('en-CA', {
     timeZone: timezone,
@@ -42,16 +42,27 @@ export function buildCompressedAxis(report: MonthlyReport): CompressedAxis {
   });
   const weekdayFmt = new Intl.DateTimeFormat('en-US', { timeZone: timezone, weekday: 'short' });
 
+  const parsedIntervals = report.work_intervals
+    .map((raw) => ({ from: Date.parse(raw.from), to: Date.parse(raw.to) }))
+    .filter((interval) => interval.to > interval.from);
+  const workingTime = parsedIntervals.reduce(
+    (total, interval) => total + interval.to - interval.from,
+    0,
+  );
+  const gapCount = Math.max(0, parsedIntervals.length - 1);
+  const requestedGapRatio = (Math.max(0, intervalGapPct) / 100) * gapCount;
+  const gapRatio = Math.min(0.9, requestedGapRatio);
+  const projectedTotal = workingTime > 0 ? workingTime / (1 - gapRatio) : 0;
+  const gapSize = gapCount > 0 ? (projectedTotal * gapRatio) / gapCount : 0;
+
   const intervals: AxisInterval[] = [];
   let offset = 0;
 
-  for (const raw of report.work_intervals) {
-    const from = Date.parse(raw.from);
-    const to = Date.parse(raw.to);
-    if (to <= from) continue;
+  parsedIntervals.forEach(({ from, to }, index) => {
     intervals.push({ from, to, offset });
     offset += to - from;
-  }
+    if (index < parsedIntervals.length - 1) offset += gapSize;
+  });
 
   const total = Math.max(1, offset);
 
@@ -116,6 +127,21 @@ export function projectToAxis(utcMs: number, axis: CompressedAxis): number {
 
   const last = axis.intervals[axis.intervals.length - 1];
   return last ? ((last.offset + (last.to - last.from)) / axis.total) * 100 : 100;
+}
+
+export function unprojectFromAxis(axisPct: number, axis: CompressedAxis): number {
+  if (axis.intervals.length === 0) return 0;
+
+  const offset = (Math.min(100, Math.max(0, axisPct)) / 100) * axis.total;
+
+  for (const interval of axis.intervals) {
+    const intervalEnd = interval.offset + (interval.to - interval.from);
+    if (offset <= intervalEnd) {
+      return interval.from + Math.max(0, offset - interval.offset);
+    }
+  }
+
+  return axis.intervals[axis.intervals.length - 1]?.to ?? 0;
 }
 
 export function isOnAxis(utcMs: number, axis: CompressedAxis): boolean {

@@ -42,30 +42,33 @@ export function TeamStatus({
       ) : (
         <div className="grid gap-x-8 gap-y-3 sm:grid-cols-2 xl:grid-cols-3">
           {activeMembers.map((member) => (
-            <div key={member.account_id} className="min-w-0 border-l-2 border-emerald-500 pl-3">
-              <div className="flex min-w-0 items-center gap-2">
-                <Avatar report={report} assignee={member.account_id} size={26} />
+            <div
+              key={member.account_id}
+              className="flex min-h-14 min-w-0 border-l-2 border-emerald-500"
+            >
+              <Avatar report={report} assignee={member.account_id} size={56} />
+              <div className="min-w-0 py-1 pl-3">
                 <h3 className="truncate text-sm font-semibold text-slate-800">
                   {member.display_name}
                 </h3>
+                <ul className="mt-1.5 space-y-0.5">
+                  {member.development_issues.map((issue) => (
+                    <li key={issue.issue_key} className="min-w-0 text-xs text-slate-600">
+                      <button
+                        type="button"
+                        className="w-full truncate text-left hover:text-slate-950 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-500"
+                        title={`${issue.issue_key}${issue.summary ? ` · ${issue.summary}` : ''}`}
+                        onClick={() => onSelectIssue(issue.issue_key)}
+                      >
+                        <span className="font-mono font-semibold text-slate-700">
+                          {issue.issue_key}
+                        </span>
+                        {issue.summary ? ` · ${issue.summary}` : ''}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
               </div>
-              <ul className="mt-1.5 space-y-0.5 pl-8">
-                {member.development_issues.map((issue) => (
-                  <li key={issue.issue_key} className="min-w-0 text-xs text-slate-600">
-                    <button
-                      type="button"
-                      className="w-full truncate text-left hover:text-slate-950 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-500"
-                      title={`${issue.issue_key}${issue.summary ? ` · ${issue.summary}` : ''}`}
-                      onClick={() => onSelectIssue(issue.issue_key)}
-                    >
-                      <span className="font-mono font-semibold text-slate-700">
-                        {issue.issue_key}
-                      </span>
-                      {issue.summary ? ` · ${issue.summary}` : ''}
-                    </button>
-                  </li>
-                ))}
-              </ul>
             </div>
           ))}
         </div>
