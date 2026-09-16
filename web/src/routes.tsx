@@ -50,6 +50,7 @@ const searchSchema = z.object({
   search: z.string().optional(),
   view: z.enum(['issues', 'continuity']).optional(),
   focus: z.string().optional(),
+  order: z.enum(['default', 'current_status']).optional(),
 });
 
 const rootRoute = createRootRoute({
@@ -116,6 +117,7 @@ function Dashboard() {
   );
   const deferredFilters = useDeferredValue(filters);
   const timelineView = search.view ?? 'issues';
+  const issueOrder = search.order ?? 'default';
 
   const { data, isPending, isError, error, isFetching } = useQuery(reportQuery(date, span));
   const liveStatus = useLiveReports();
@@ -133,6 +135,7 @@ function Dashboard() {
       search?: string;
       view?: 'issues' | 'continuity';
       focus?: string;
+      order?: 'default' | 'current_status';
     }) => {
       navigate({
         search: (previous) => {
@@ -153,6 +156,7 @@ function Dashboard() {
             search: merged.search ? merged.search : undefined,
             view: merged.view === 'continuity' ? merged.view : undefined,
             focus: merged.focus ? merged.focus : undefined,
+            order: merged.order === 'current_status' ? merged.order : undefined,
           };
         },
         replace: true,
@@ -259,30 +263,47 @@ function Dashboard() {
                       ? 'Continuidad del trabajo'
                       : TIMELINE_TITLE[span]}
                   </h2>
-                  <fieldset
-                    className="inline-flex rounded-none border border-slate-300 p-0.5"
-                    aria-label="Vista de cronología"
-                  >
-                    {(
-                      [
-                        ['issues', 'Por issue'],
-                        ['continuity', 'Continuidad'],
-                      ] as const
-                    ).map(([value, label]) => (
-                      <button
-                        key={value}
-                        type="button"
-                        onClick={() => update({ view: value })}
-                        className={`rounded-none px-2.5 py-1 text-xs transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-500 ${
-                          timelineView === value
-                            ? 'bg-slate-800 text-white'
-                            : 'text-slate-600 hover:bg-slate-100'
-                        }`}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </fieldset>
+                  <div className="flex items-center gap-2">
+                    <fieldset
+                      className="inline-flex rounded-none border border-slate-300 p-0.5"
+                      aria-label="Vista de cronología"
+                    >
+                      {(
+                        [
+                          ['issues', 'Por issue'],
+                          ['continuity', 'Continuidad'],
+                        ] as const
+                      ).map(([value, label]) => (
+                        <button
+                          key={value}
+                          type="button"
+                          onClick={() => update({ view: value })}
+                          className={`rounded-none px-2.5 py-1 text-xs transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-500 ${
+                            timelineView === value
+                              ? 'bg-slate-800 text-white'
+                              : 'text-slate-600 hover:bg-slate-100'
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </fieldset>
+                    {timelineView === 'issues' && span === 'month' && (
+                      <label className="flex items-center gap-1.5 text-xs text-slate-600">
+                        Ordenar
+                        <select
+                          value={issueOrder}
+                          onChange={(event) =>
+                            update({ order: event.target.value as 'default' | 'current_status' })
+                          }
+                          className="border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-500"
+                        >
+                          <option value="default">Orden original</option>
+                          <option value="current_status">Estado actual</option>
+                        </select>
+                      </label>
+                    )}
+                  </div>
                 </div>
                 {timelineView === 'issues' && <TimelineLegend report={data} span={span} />}
                 {view.matchedIssues === 0 && (
@@ -303,7 +324,12 @@ function Dashboard() {
                 ) : span === 'day' && timelineReport ? (
                   <DayView report={timelineReport} matches={highlight} />
                 ) : timelineReport ? (
-                  <Gantt report={timelineReport} matches={highlight} onSelectIssue={selectIssue} />
+                  <Gantt
+                    report={timelineReport}
+                    matches={highlight}
+                    onSelectIssue={selectIssue}
+                    orderByStatus={issueOrder === 'current_status'}
+                  />
                 ) : null}
               </section>
 

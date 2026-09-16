@@ -12,6 +12,8 @@ import {
 import type { MatchFn } from '@/lib/filters';
 import { jiraIssueUrl } from '@/lib/jira';
 import {
+  categoryRank,
+  currentCategoryOf,
   formatDuration,
   type Issue,
   isBlip,
@@ -241,10 +243,29 @@ interface GanttProps {
   report: MonthlyReport;
   matches?: MatchFn;
   onSelectIssue?: (issueKey: string) => void;
+  orderByStatus?: boolean;
 }
 
-export const Gantt = memo(function Gantt({ report, matches, onSelectIssue }: GanttProps) {
+export const Gantt = memo(function Gantt({
+  report,
+  matches,
+  onSelectIssue,
+  orderByStatus = false,
+}: GanttProps) {
   const axis = useMemo(() => buildCompressedAxis(report), [report]);
+  const issues = useMemo(() => {
+    if (!orderByStatus) return report.issues;
+
+    return [...report.issues].sort((a, b) => {
+      const byCategory = categoryRank(currentCategoryOf(a)) - categoryRank(currentCategoryOf(b));
+      if (byCategory !== 0) return byCategory;
+
+      const byStatus = (a.current_status_name ?? '').localeCompare(b.current_status_name ?? '');
+      if (byStatus !== 0) return byStatus;
+
+      return a.issue_key.localeCompare(b.issue_key);
+    });
+  }, [orderByStatus, report.issues]);
   const generatedAt = Date.parse(report.generated_at);
   const showNow = isOnAxis(generatedAt, axis);
   const nowPct = projectToAxis(generatedAt, axis);
@@ -276,7 +297,7 @@ export const Gantt = memo(function Gantt({ report, matches, onSelectIssue }: Gan
         </div>
 
         <GanttRows axis={axis} timezone={report.work_schedule.timezone}>
-          {report.issues.map((issue: Issue) => (
+          {issues.map((issue: Issue) => (
             <div key={issue.issue_key} className="flex items-stretch">
               <div
                 className="flex w-52 flex-none flex-col overflow-hidden py-1.5 pr-2.5 transition-opacity"
