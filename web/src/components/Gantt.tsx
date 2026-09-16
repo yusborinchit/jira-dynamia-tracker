@@ -10,6 +10,7 @@ import {
   unprojectFromAxis,
 } from '@/lib/axis';
 import type { MatchFn } from '@/lib/filters';
+import { jiraIssueUrl } from '@/lib/jira';
 import {
   formatDuration,
   type Issue,
@@ -211,11 +212,18 @@ const SegmentBars = memo(function SegmentBars({
         return (
           <Fragment key={span.left}>
             {onSelectIssue ? (
-              <button
-                type="button"
+              <a
+                href={jiraIssueUrl(issue.issue_key) ?? undefined}
+                target="_blank"
+                rel="noreferrer"
                 className={classes}
                 style={style}
-                onClick={() => onSelectIssue(issue.issue_key)}
+                onClick={(event) => {
+                  if (!jiraIssueUrl(issue.issue_key)) {
+                    event.preventDefault();
+                    onSelectIssue(issue.issue_key);
+                  }
+                }}
                 {...bind}
               />
             ) : (
@@ -274,13 +282,20 @@ export const Gantt = memo(function Gantt({ report, matches, onSelectIssue }: Gan
                 className="flex w-52 flex-none flex-col overflow-hidden py-1.5 pr-2.5 transition-opacity"
                 style={{ opacity: matches && !matches(issue.issue_key) ? 0.35 : 1 }}
               >
-                <button
-                  type="button"
+                <a
+                  href={jiraIssueUrl(issue.issue_key) ?? undefined}
+                  target="_blank"
+                  rel="noreferrer"
                   className="truncate text-left font-mono text-[11px] font-semibold hover:underline"
-                  onClick={() => onSelectIssue?.(issue.issue_key)}
+                  onClick={(event) => {
+                    if (!jiraIssueUrl(issue.issue_key)) {
+                      event.preventDefault();
+                      onSelectIssue?.(issue.issue_key);
+                    }
+                  }}
                 >
                   {issue.issue_key}
-                </button>
+                </a>
                 <span className="truncate text-[11px] text-slate-500" title={issue.summary ?? ''}>
                   {issue.summary ?? ''}
                 </span>

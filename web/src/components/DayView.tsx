@@ -2,6 +2,7 @@ import { memo, useMemo } from 'react';
 import { SegmentTooltip } from '@/components/SegmentTooltip';
 import { useTooltip } from '@/components/Tooltip';
 import type { MatchFn } from '@/lib/filters';
+import { jiraIssueUrl } from '@/lib/jira';
 import { type Issue, isBlip, type MonthlyReport } from '@/lib/report';
 
 interface Block {
@@ -292,8 +293,11 @@ export const DayView = memo(function DayView({
             const width = right - left;
 
             return (
-              <div
+              <a
                 key={`${block.issueKey}-${block.from}-${block.lane}`}
+                href={jiraIssueUrl(block.issueKey) ?? undefined}
+                target="_blank"
+                rel="noreferrer"
                 className="absolute flex items-center overflow-hidden rounded-none px-1.5 text-[10px] leading-none text-white/95"
                 style={{
                   opacity: dimmed(block) ? DIMMED_OPACITY : 1,
@@ -318,7 +322,7 @@ export const DayView = memo(function DayView({
               >
                 <span className="truncate font-mono font-semibold">{block.issueKey}</span>
                 <span className="truncate pl-1.5 opacity-75">{block.statusName}</span>
-              </div>
+              </a>
             );
           })}
         </div>

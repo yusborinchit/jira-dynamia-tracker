@@ -23,6 +23,16 @@ pnpm dev                      # API on :3000
 pnpm dev:web                  # dashboard on :5173, proxies /reports to :3000
 ```
 
+To open a task in Jira from the dashboard, set its public base URL in `.env` and restart the web
+build/server:
+
+```bash
+VITE_JIRA_BASE_URL=https://tu-equipo.atlassian.net
+```
+
+The task key, its summary, timeline bars, day-view blocks, and current-team task links then open
+`/browse/<issue-key>` in a new tab.
+
 In production a single process serves both: `pnpm build` builds the web bundle and the server, and
 Fastify serves `web/dist` at `/`. Without a web build the server still runs — it logs
 `web build not found, skipping static routes` and only exposes the API.

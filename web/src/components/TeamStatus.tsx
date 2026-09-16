@@ -1,4 +1,5 @@
 import { Avatar } from '@/components/Avatar';
+import { jiraIssueUrl } from '@/lib/jira';
 import type { MonthlyReport } from '@/lib/report';
 
 export function TeamStatus({
@@ -54,17 +55,24 @@ export function TeamStatus({
                 <ul className="mt-1.5 space-y-0.5">
                   {member.development_issues.map((issue) => (
                     <li key={issue.issue_key} className="min-w-0 text-xs text-slate-600">
-                      <button
-                        type="button"
+                      <a
+                        href={jiraIssueUrl(issue.issue_key) ?? undefined}
+                        target="_blank"
+                        rel="noreferrer"
                         className="w-full truncate text-left hover:text-slate-950 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-500"
                         title={`${issue.issue_key}${issue.summary ? ` · ${issue.summary}` : ''}`}
-                        onClick={() => onSelectIssue(issue.issue_key)}
+                        onClick={(event) => {
+                          if (!jiraIssueUrl(issue.issue_key)) {
+                            event.preventDefault();
+                            onSelectIssue(issue.issue_key);
+                          }
+                        }}
                       >
                         <span className="font-mono font-semibold text-slate-700">
                           {issue.issue_key}
                         </span>
                         {issue.summary ? ` · ${issue.summary}` : ''}
-                      </button>
+                      </a>
                     </li>
                   ))}
                 </ul>

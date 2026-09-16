@@ -10,6 +10,7 @@ import { memo, useMemo, useState } from 'react';
 
 import { Avatar } from '@/components/Avatar';
 import type { MatchFn } from '@/lib/filters';
+import { jiraIssueUrl } from '@/lib/jira';
 import {
   categoryColor,
   categoryLabel,
@@ -97,9 +98,22 @@ export const IssueTable = memo(function IssueTable({
       helper.columns([
         helper.accessor('issue_key', {
           header: 'Issue',
-          cell: ({ getValue }) => (
-            <span className="font-mono text-[11px] whitespace-nowrap">{getValue()}</span>
-          ),
+          cell: ({ getValue }) => {
+            const issueKey = getValue();
+            const href = jiraIssueUrl(issueKey);
+            return href ? (
+              <a
+                href={href}
+                target="_blank"
+                rel="noreferrer"
+                className="font-mono text-[11px] whitespace-nowrap hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-500"
+              >
+                {issueKey}
+              </a>
+            ) : (
+              <span className="font-mono text-[11px] whitespace-nowrap">{issueKey}</span>
+            );
+          },
         }),
         helper.accessor('project_key', {
           header: 'Proyecto',
@@ -108,10 +122,22 @@ export const IssueTable = memo(function IssueTable({
         helper.accessor((issue) => issue.summary ?? '', {
           id: 'summary',
           header: 'Resumen',
-          cell: ({ getValue }) => {
+          cell: ({ row, getValue }) => {
             const value = getValue();
+            const href = jiraIssueUrl(row.original.issue_key);
             return value ? (
-              <span className="text-slate-700">{value}</span>
+              href ? (
+                <a
+                  href={href}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-slate-700 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-500"
+                >
+                  {value}
+                </a>
+              ) : (
+                <span className="text-slate-700">{value}</span>
+              )
             ) : (
               <span className="text-slate-400">—</span>
             );
