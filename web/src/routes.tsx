@@ -9,6 +9,7 @@ import {
 } from '@tanstack/react-router';
 import { useCallback, useDeferredValue, useMemo } from 'react';
 import { z } from 'zod';
+import { Board } from '@/components/Board';
 import {
   ContinuityView,
   continuityTargets,
@@ -49,7 +50,7 @@ const searchSchema = z.object({
   assignees: z.array(z.string()).optional(),
   excludedAssignees: z.array(z.string()).optional(),
   search: z.string().optional(),
-  view: z.enum(['issues', 'continuity']).optional(),
+  view: z.enum(['issues', 'continuity', 'board']).optional(),
   focus: z.string().optional(),
   order: z.enum(['default', 'current_status']).optional(),
 });
@@ -134,7 +135,7 @@ function Dashboard() {
       assignees?: string[];
       excludedAssignees?: string[];
       search?: string;
-      view?: 'issues' | 'continuity';
+      view?: 'issues' | 'continuity' | 'board';
       focus?: string;
       order?: 'default' | 'current_status';
     }) => {
@@ -155,7 +156,7 @@ function Dashboard() {
               ? merged.excludedAssignees
               : undefined,
             search: merged.search ? merged.search : undefined,
-            view: merged.view === 'continuity' ? merged.view : undefined,
+            view: merged.view === 'issues' ? undefined : merged.view,
             focus: merged.focus ? merged.focus : undefined,
             order: merged.order === 'current_status' ? merged.order : undefined,
           };
@@ -178,10 +179,15 @@ function Dashboard() {
     [data, effectiveFilters],
   );
   const highlight = isFiltered(deferredFilters) ? view?.matches : undefined;
-  const timelineReport =
-    view && (deferredFilters.assignees.length > 0 || deferredFilters.excludedAssignees.length > 0)
-      ? view.report
-      : data;
+  const timelineReport = useMemo(() => {
+    if (!view || !data) return undefined;
+    const base =
+      deferredFilters.assignees.length > 0 || deferredFilters.excludedAssignees.length > 0
+        ? view.report
+        : data;
+    if (!isFiltered(deferredFilters)) return base;
+    return { ...base, issues: base.issues.filter((issue) => view.matches(issue.issue_key)) };
+  }, [data, deferredFilters, view]);
   const selectIssue = useCallback((issueKey: string) => update({ search: issueKey }), [update]);
   const changeFocus = useCallback(
     (target: ContinuityTarget) => update({ focus: `${target.kind}:${target.value}` }),
@@ -239,7 +245,7 @@ function Dashboard() {
                 ? () => downloadReportExcel(view.report, deferredFilters, view.matches)
                 : undefined
             }
-            showCategories={timelineView === 'issues'}
+            showCategories={timelineView !== 'continuity'}
             onChange={update}
           />
         </header>
@@ -265,7 +271,9 @@ function Dashboard() {
                     <h2 className="text-sm font-semibold tracking-tight">
                       {timelineView === 'continuity'
                         ? 'Continuidad del trabajo'
-                        : TIMELINE_TITLE[span]}
+                        : timelineView === 'board'
+                          ? 'Tablero'
+                          : TIMELINE_TITLE[span]}
                     </h2>
                     <div className="flex items-center gap-2">
                       <fieldset
@@ -276,6 +284,7 @@ function Dashboard() {
                           [
                             ['issues', 'Por issue'],
                             ['continuity', 'Continuidad'],
+                            ['board', 'Tablero'],
                           ] as const
                         ).map(([value, label]) => (
                           <button
@@ -314,7 +323,7 @@ function Dashboard() {
                     <p className="pb-2 text-xs text-slate-500">
                       {timelineView === 'continuity'
                         ? 'Ningún issue coincide con los filtros; no hay continuidad para mostrar.'
-                        : 'Ningún issue coincide con el filtro; se muestra todo atenuado.'}
+                        : 'Ningún issue coincide con el filtro.'}
                     </p>
                   )}
                   {timelineView === 'continuity' && focusTarget ? (
@@ -325,20 +334,25 @@ function Dashboard() {
                       assignees={deferredFilters.assignees}
                       onTargetChange={changeFocus}
                     />
-                  ) : span === 'day' && timelineReport ? (
+                  ) : !timelineReport ||
+                    timelineReport.issues.length === 0 ? null : timelineView === 'board' ? (
+                    <Board report={timelineReport} />
+                  ) : span === 'day' ? (
                     <DayView report={timelineReport} matches={highlight} />
-                  ) : timelineReport ? (
+                  ) : (
                     <Gantt
                       report={timelineReport}
                       matches={highlight}
                       orderByStatus={issueOrder === 'current_status'}
                     />
-                  ) : null}
+                  )}
                 </section>
 
                 <section>
                   <h2 className="mb-2 text-sm font-semibold tracking-tight">Detalle por issue</h2>
-                  {timelineReport && <IssueTable report={timelineReport} matches={highlight} />}
+                  {timelineReport && timelineReport.issues.length > 0 && (
+                    <IssueTable report={timelineReport} matches={highlight} />
+                  )}
                 </section>
               </>
             )}
