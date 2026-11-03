@@ -1,19 +1,19 @@
+import { ACTIVE_WORK_CATEGORY, UNCATEGORIZED } from '@/db/defaults';
 import type { AssigneeHistoryRow } from '@/db/schema';
-import { CATEGORY_COLORS, isTerminalCategory, UNCATEGORIZED_COLOR } from '@/db/status-mapping.data';
 import {
   findAssignmentsOverlapping,
   listKnownAssignees,
 } from '@/repositories/assignment.repository';
 import { findSegmentsOverlapping } from '@/repositories/history.repository';
 import { listIssues, listIssuesByKeys } from '@/repositories/issue.repository';
-import { loadCategoryResolver, UNCATEGORIZED } from '@/repositories/status.repository';
 import {
-  intersectWorkIntervals,
-  secondsOf,
-  WORK_DAYS,
-  WORK_SHIFTS,
-  workIntervalsInRange,
-} from '@/utils/business-hours';
+  type AppConfig,
+  type CategoryConfig,
+  categoryList,
+  getConfig,
+  isTerminal,
+} from '@/services/config.service';
+import { intersectWorkIntervals, secondsOf, workIntervalsInRange } from '@/utils/business-hours';
 import { clipToRange, monthRange, type Range, REPORT_TIMEZONE, toIso } from '@/utils/time';
 
 export interface WorkSchedule {
@@ -55,6 +55,8 @@ export interface MonthlyIssue {
   current_category: string | null;
   current_assignee_id: string | null;
   current_assignee_name: string | null;
+  current_since: string | null;
+  current_work_seconds: number | null;
   total_seconds: number;
   by_category: Record<string, number>;
   by_assignee: Record<string, Record<string, number>>;
@@ -74,6 +76,7 @@ export interface Report {
   assignee_avatars: Record<string, string>;
   team_members: TeamMember[];
   category_colors: Record<string, string>;
+  categories: CategoryConfig[];
   work_schedule: WorkSchedule;
   work_intervals: WorkInterval[];
 }
@@ -96,19 +99,16 @@ export const UNASSIGNED = 'unassigned';
 
 const UNASSIGNED_LABEL = 'Sin asignar';
 
-function pad2(value: number): string {
-  return String(value).padStart(2, '0');
-}
-
-function describeWorkSchedule(): WorkSchedule {
+function describeWorkSchedule(config: AppConfig): WorkSchedule {
   return {
     timezone: REPORT_TIMEZONE,
-    days: [...WORK_DAYS].sort((a, b) => a - b),
-    shifts: WORK_SHIFTS.map(
-      (shift) =>
-        `${pad2(shift.startHour)}:${pad2(shift.startMinute)}-${pad2(shift.endHour)}:${pad2(shift.endMinute)}`,
-    ),
+    days: [...config.scheduleSetting.days].sort((a, b) => a - b),
+    shifts: config.scheduleSetting.shifts.map((shift) => `${shift.from}-${shift.to}`),
   };
+}
+
+function personAlias(config: AppConfig, accountId: string): string | null {
+  return config.people.get(accountId)?.alias || null;
 }
 
 function splitByAssignee(
@@ -148,8 +148,9 @@ export function buildMonthlyReport(month: string, now = Date.now()): MonthlyRepo
 }
 
 export function buildReport(range: Range, now = Date.now()): Report {
-  const workIntervals = workIntervalsInRange(range);
-  const resolver = loadCategoryResolver();
+  const config = getConfig();
+  const workIntervals = workIntervalsInRange(range, config.schedule);
+  const resolver = config.resolver;
   const rows = findSegmentsOverlapping(range, now);
 
   const teamById = new Map<string, TeamMember>();
@@ -178,7 +179,7 @@ export function buildReport(range: Range, now = Date.now()): Report {
 
     if (issue.currentAssigneeName) member.display_name = issue.currentAssigneeName;
     if (issue.currentAssigneeAvatar) member.avatar_url = issue.currentAssigneeAvatar;
-    if (resolver.resolve(issue.currentStatusId, issue.currentStatusName) === 'development') {
+    if (resolver.resolve(issue.currentStatusId, issue.currentStatusName) === ACTIVE_WORK_CATEGORY) {
       member.development_issues.push({
         issue_key: issue.issueKey,
         summary: issue.summary,
@@ -186,10 +187,16 @@ export function buildReport(range: Range, now = Date.now()): Report {
     }
   }
 
-  const teamMembers = [...teamById.values()].sort((a, b) => {
-    const byWork = a.development_issues.length - b.development_issues.length;
-    return byWork || a.display_name.localeCompare(b.display_name, 'es');
-  });
+  for (const member of teamById.values()) {
+    member.display_name = personAlias(config, member.account_id) ?? member.display_name;
+  }
+
+  const teamMembers = [...teamById.values()]
+    .filter((member) => !config.people.get(member.account_id)?.hidden)
+    .sort((a, b) => {
+      const byWork = a.development_issues.length - b.development_issues.length;
+      return byWork || a.display_name.localeCompare(b.display_name, 'es');
+    });
 
   const assignmentsByIssue = new Map<string, AssigneeHistoryRow[]>();
   const assigneeNames: Record<string, string> = { [UNASSIGNED]: UNASSIGNED_LABEL };
@@ -221,7 +228,7 @@ export function buildReport(range: Range, now = Date.now()): Report {
     if (!clipped) continue;
 
     const category = resolver.resolve(row.statusId, row.statusName) ?? UNCATEGORIZED;
-    const terminal = isTerminalCategory(category);
+    const terminal = isTerminal(config, category);
     const worked = terminal ? [] : intersectWorkIntervals(clipped, workIntervals);
     const seconds = secondsOf(worked);
 
@@ -235,6 +242,8 @@ export function buildReport(range: Range, now = Date.now()): Report {
         current_category: null,
         current_assignee_id: null,
         current_assignee_name: null,
+        current_since: null,
+        current_work_seconds: null,
         total_seconds: 0,
         by_category: {},
         by_assignee: {},
@@ -264,6 +273,12 @@ export function buildReport(range: Range, now = Date.now()): Report {
       terminal,
       seconds,
     });
+    if (row.leftAt === null) {
+      issue.current_since = toIso(row.enteredAt);
+      issue.current_work_seconds = terminal
+        ? null
+        : secondsOf(workIntervalsInRange({ from: start, to: now }, config.schedule));
+    }
     if (terminal) continue;
 
     issue.total_seconds += seconds;
@@ -308,11 +323,24 @@ export function buildReport(range: Range, now = Date.now()): Report {
     .filter((issue) => issue.segments.some((segment) => !segment.terminal))
     .sort((a, b) => a.issue_key.localeCompare(b.issue_key));
 
+  for (const accountId of Object.keys(assigneeNames)) {
+    const alias = personAlias(config, accountId);
+    if (alias) assigneeNames[accountId] = alias;
+  }
+  for (const issue of issues) {
+    if (issue.current_assignee_id) {
+      issue.current_assignee_name =
+        personAlias(config, issue.current_assignee_id) ?? issue.current_assignee_name;
+    }
+  }
+
   const totalsByProject: Record<string, number> = {};
   for (const issue of issues) {
     const key = issue.project_key || 'unknown';
     totalsByProject[key] = (totalsByProject[key] ?? 0) + issue.total_seconds;
   }
+
+  const categories = categoryList(config);
 
   return {
     from: new Date(range.from).toISOString(),
@@ -325,8 +353,11 @@ export function buildReport(range: Range, now = Date.now()): Report {
     assignee_names: assigneeNames,
     assignee_avatars: assigneeAvatars,
     team_members: teamMembers,
-    category_colors: { ...CATEGORY_COLORS, [UNCATEGORIZED]: UNCATEGORIZED_COLOR },
-    work_schedule: describeWorkSchedule(),
+    category_colors: Object.fromEntries(
+      categories.map((category) => [category.key, category.color]),
+    ),
+    categories,
+    work_schedule: describeWorkSchedule(config),
     work_intervals: workIntervals.map((interval) => ({
       from: toIso(interval.from)!,
       to: toIso(interval.to)!,

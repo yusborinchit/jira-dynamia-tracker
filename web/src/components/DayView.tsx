@@ -311,7 +311,7 @@ export const DayView = memo(function DayView({
                   height: LANE_HEIGHT - 3,
                   background: report.category_colors[block.category] ?? '#ec4899',
                 }}
-                {...tooltip(
+                {...tooltip(() => (
                   <SegmentTooltip
                     report={report}
                     issue={block.issue}
@@ -320,8 +320,8 @@ export const DayView = memo(function DayView({
                     seconds={Math.round((block.to - block.from) / 1000)}
                     open={block.open && block.isSegmentEnd}
                     spans={[{ from: block.from, to: block.to }]}
-                  />,
-                )}
+                  />
+                ))}
               >
                 <span className="truncate font-mono font-semibold">{block.issueKey}</span>
                 <span className="truncate pl-1.5 opacity-75">{block.statusName}</span>

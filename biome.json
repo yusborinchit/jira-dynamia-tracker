@@ -9,7 +9,6 @@
     "ignoreUnknown": false,
     "includes": [
       "src/**",
-      "tests/**",
       "web/src/**",
       "web/*.ts",
       "*.ts",
@@ -46,7 +45,7 @@
   "overrides": [
     {
       "includes": [
-        "src/db/load-status-mapping.ts"
+        "src/db/seed.ts"
       ],
       "linter": {
         "rules": {

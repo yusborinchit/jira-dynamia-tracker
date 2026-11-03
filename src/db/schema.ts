@@ -95,3 +95,55 @@ export type Issue = typeof issues.$inferSelect;
 export type StatusHistoryRow = typeof statusHistory.$inferSelect;
 export type AssigneeHistoryRow = typeof assigneeHistory.$inferSelect;
 export type StatusMappingRow = typeof statusMapping.$inferSelect;
+
+export const categorySettings = sqliteTable('category_settings', {
+  category: text('category').primaryKey(),
+  label: text('label').notNull(),
+  color: text('color').notNull(),
+  role: text('role').notNull(),
+  alertAfterSeconds: integer('alert_after_seconds'),
+  position: integer('position').notNull(),
+});
+
+export const appSettings = sqliteTable('app_settings', {
+  id: integer('id').primaryKey(),
+  timezone: text('timezone').notNull(),
+  workDays: text('work_days').notNull(),
+  workShifts: text('work_shifts').notNull(),
+  updatedAt: timestampMs('updated_at').notNull(),
+});
+
+export const holidays = sqliteTable('holidays', {
+  date: text('date').primaryKey(),
+  label: text('label').notNull(),
+});
+
+export const people = sqliteTable('people', {
+  accountId: text('account_id').primaryKey(),
+  alias: text('alias'),
+  hidden: integer('hidden', { mode: 'boolean' }).notNull().default(false),
+});
+
+export const webhookEvents = sqliteTable(
+  'webhook_events',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    fingerprint: text('fingerprint').notNull().unique(),
+    issueKey: text('issue_key'),
+    event: text('event').notNull(),
+    outcome: text('outcome').notNull(),
+    duplicateCount: integer('duplicate_count').notNull().default(0),
+    reason: text('reason'),
+    detail: text('detail'),
+    body: text('body'),
+    occurredAt: timestampMs('occurred_at'),
+    receivedAt: timestampMs('received_at').notNull(),
+  },
+  (t) => [index('webhook_events_received_at_idx').on(t.receivedAt)],
+);
+
+export type CategoryRow = typeof categorySettings.$inferSelect;
+export type AppSettingsRow = typeof appSettings.$inferSelect;
+export type HolidayRow = typeof holidays.$inferSelect;
+export type PersonRow = typeof people.$inferSelect;
+export type WebhookEventRow = typeof webhookEvents.$inferSelect;

@@ -1,4 +1,6 @@
-import { queryOptions } from '@tanstack/react-query';
+import { keepPreviousData, queryOptions } from '@tanstack/react-query';
+
+import { api } from '@/lib/api';
 
 export interface WorkInterval {
   from: string;
@@ -33,6 +35,8 @@ export interface Issue {
   current_category: string | null;
   current_assignee_id: string | null;
   current_assignee_name: string | null;
+  current_since: string | null;
+  current_work_seconds: number | null;
   total_seconds: number;
   by_category: Record<string, number>;
   by_assignee: Record<string, Record<string, number>>;
@@ -48,6 +52,18 @@ export interface WorkSchedule {
 
 export type Span = 'day' | 'month';
 
+export type CategoryRole = 'active' | 'waiting' | 'terminal';
+
+export interface CategoryInfo {
+  key: string;
+  label: string;
+  color: string;
+  role: CategoryRole;
+  terminal: boolean;
+  alert_after_seconds: number | null;
+  order: number;
+}
+
 export interface MonthlyReport {
   span: Span;
   date: string;
@@ -62,6 +78,7 @@ export interface MonthlyReport {
   assignee_avatars: Record<string, string>;
   team_members: TeamMember[];
   category_colors: Record<string, string>;
+  categories: CategoryInfo[];
   work_schedule: WorkSchedule;
   work_intervals: WorkInterval[];
 }
@@ -76,19 +93,26 @@ export interface TeamMember {
   }[];
 }
 
-async function fetchReport(date: string, span: Span): Promise<MonthlyReport> {
-  const response = await fetch(`/reports/range?date=${date}&span=${span}`);
-  if (!response.ok) {
-    throw new Error(`El servidor respondió ${response.status}`);
-  }
-  return response.json() as Promise<MonthlyReport>;
+const categoryMeta = new Map<string, CategoryInfo>();
+
+export function registerCategories(categories: readonly CategoryInfo[]): void {
+  categoryMeta.clear();
+  for (const category of categories) categoryMeta.set(category.key, category);
+}
+
+async function fetchReport(date: string, span: Span, signal: AbortSignal): Promise<MonthlyReport> {
+  const report = await api<MonthlyReport>(`/reports/range?date=${date}&span=${span}`, { signal });
+  registerCategories(report.categories);
+  return report;
 }
 
 export function reportQuery(date: string, span: Span) {
   return queryOptions({
     queryKey: ['report', span, date] as const,
-    queryFn: () => fetchReport(date, span),
+    queryFn: ({ signal }) => fetchReport(date, span, signal),
     staleTime: 30_000,
+    placeholderData: (previous, previousQuery) =>
+      previousQuery?.queryKey[1] === span ? keepPreviousData(previous) : undefined,
   });
 }
 
@@ -139,27 +163,33 @@ export function isBlip(segment: Segment): boolean {
 }
 
 export function categoryLabel(category: string): string {
+  const known = categoryMeta.get(category)?.label;
+  if (known) return known;
   const spaced = category.replace(/_/g, ' ');
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+export function categoryAlertSeconds(category: string | null): number | null {
+  return category ? (categoryMeta.get(category)?.alert_after_seconds ?? null) : null;
+}
+
+export function isOverdue(issue: Issue): boolean {
+  const limit = categoryAlertSeconds(issue.current_category);
+  return limit !== null && (issue.current_work_seconds ?? 0) > limit;
 }
 
 export const UNCATEGORIZED = 'uncategorized';
 
 export const CATEGORY_COLOR_FALLBACK = '#ec4899';
 
-export const CATEGORY_ORDER = [
-  'development',
-  'testing',
-  'deploy',
-  'waiting_info',
-  'pending',
-  UNCATEGORIZED,
-  'done',
-];
+const UNKNOWN_RANK = 100_000;
 
 export function categoryRank(category: string | null): number {
-  const index = category === null ? -1 : CATEGORY_ORDER.indexOf(category);
-  return index === -1 ? CATEGORY_ORDER.length : index;
+  const meta = category === null ? undefined : categoryMeta.get(category);
+  if (!meta) return UNKNOWN_RANK;
+  if (meta.terminal) return UNKNOWN_RANK * 2 + meta.order;
+  if (meta.key === UNCATEGORIZED) return UNKNOWN_RANK - 1;
+  return meta.order;
 }
 
 export function currentCategoryOf(issue: Issue): string {

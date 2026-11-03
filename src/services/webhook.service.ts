@@ -67,7 +67,7 @@ function buildTransition(
 
 const AVATAR_SIZES = ['48x48', '32x32', '24x24', '16x16'];
 
-function pickAvatar(urls: Record<string, string> | undefined): string | null {
+export function pickAvatar(urls: Record<string, string> | undefined): string | null {
   if (!urls) return null;
   for (const size of AVATAR_SIZES) {
     if (urls[size]) return urls[size];

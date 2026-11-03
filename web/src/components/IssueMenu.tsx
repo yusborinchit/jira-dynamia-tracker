@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Link } from '@tanstack/react-router';
 import {
   createContext,
   type ReactNode,
@@ -10,8 +11,10 @@ import {
   useState,
 } from 'react';
 import { createPortal } from 'react-dom';
+import { toast } from 'sonner';
 
 import { jiraIssueUrl } from '@/lib/jira';
+import { type MonthlyReport, UNCATEGORIZED } from '@/lib/report';
 import { moveIssue, transitionsQuery } from '@/lib/transitions';
 
 const VIEWPORT_MARGIN = 8;
@@ -96,7 +99,27 @@ function IssueMenuPopover({
   const transitions = useQuery(transitionsQuery(menu.issueKey));
   const move = useMutation({
     mutationFn: (transitionId: string) => moveIssue(menu.issueKey, transitionId),
-    onSuccess: () => {
+    onSuccess: (_result, transitionId) => {
+      const transition = transitions.data?.transitions.find((item) => item.id === transitionId);
+      if (transition) {
+        queryClient.setQueriesData<MonthlyReport>({ queryKey: ['report'] }, (report) =>
+          report
+            ? {
+                ...report,
+                issues: report.issues.map((issue) =>
+                  issue.issue_key === menu.issueKey
+                    ? {
+                        ...issue,
+                        current_status_name: transition.to_status_name,
+                        current_category: transition.category ?? UNCATEGORIZED,
+                      }
+                    : issue,
+                ),
+              }
+            : report,
+        );
+        toast.success(`${menu.issueKey} → ${transition.to_status_name}`);
+      }
       queryClient.removeQueries({ queryKey: ['transitions', menu.issueKey] });
       onClose();
     },
@@ -194,35 +217,42 @@ function IssueMenuPopover({
         {move.isError && <p className="px-3 py-1.5 text-red-600">{move.error.message}</p>}
       </div>
 
-      {(href || onFilterIssue) && (
-        <div className="border-t border-slate-200 py-1">
-          {href && (
-            <a
-              href={href}
-              target="_blank"
-              rel="noreferrer"
-              role="menuitem"
-              onClick={onClose}
-              className="block px-3 py-1.5 hover:bg-slate-100 focus-visible:bg-slate-100 focus-visible:outline-none"
-            >
-              Abrir en Jira ↗
-            </a>
-          )}
-          {onFilterIssue && (
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                onFilterIssue(menu.issueKey);
-                onClose();
-              }}
-              className="block w-full px-3 py-1.5 text-left hover:bg-slate-100 focus-visible:bg-slate-100 focus-visible:outline-none"
-            >
-              Filtrar por esta tarea
-            </button>
-          )}
-        </div>
-      )}
+      <div className="border-t border-slate-200 py-1">
+        {href && (
+          <a
+            href={href}
+            target="_blank"
+            rel="noreferrer"
+            role="menuitem"
+            onClick={onClose}
+            className="block px-3 py-1.5 hover:bg-slate-100 focus-visible:bg-slate-100 focus-visible:outline-none"
+          >
+            Abrir en Jira ↗
+          </a>
+        )}
+        <Link
+          to="/settings/history/$issueKey"
+          params={{ issueKey: menu.issueKey }}
+          role="menuitem"
+          onClick={onClose}
+          className="block px-3 py-1.5 hover:bg-slate-100 focus-visible:bg-slate-100 focus-visible:outline-none"
+        >
+          Corregir historial
+        </Link>
+        {onFilterIssue && (
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              onFilterIssue(menu.issueKey);
+              onClose();
+            }}
+            className="block w-full px-3 py-1.5 text-left hover:bg-slate-100 focus-visible:bg-slate-100 focus-visible:outline-none"
+          >
+            Filtrar por esta tarea
+          </button>
+        )}
+      </div>
     </div>
   );
 }

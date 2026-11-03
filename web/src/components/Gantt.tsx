@@ -162,21 +162,21 @@ const SegmentBars = memo(function SegmentBars({
     () => projectIntervals(segment.work_intervals, axis),
     [axis, segment.work_intervals],
   );
-  const tooltipContent = useMemo(
-    () => (
-      <SegmentTooltip
-        report={report}
-        issue={issue}
-        statusName={segment.status_name}
-        category={segment.category}
-        seconds={segment.seconds}
-        open={segment.open}
-        spans={spansOf(segment.work_intervals)}
-      />
-    ),
-    [issue, report, segment],
+  const bind = useMemo(
+    () =>
+      tooltip(() => (
+        <SegmentTooltip
+          report={report}
+          issue={issue}
+          statusName={segment.status_name}
+          category={segment.category}
+          seconds={segment.seconds}
+          open={segment.open}
+          spans={spansOf(segment.work_intervals)}
+        />
+      )),
+    [issue, report, segment, tooltip],
   );
-  const bind = useMemo(() => tooltip(tooltipContent), [tooltip, tooltipContent]);
 
   if (segment.terminal || segment.work_intervals.length === 0 || isBlip(segment)) return null;
 

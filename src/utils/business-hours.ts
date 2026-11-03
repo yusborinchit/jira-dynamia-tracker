@@ -1,3 +1,4 @@
+import type { WorkScheduleSetting } from '@/db/defaults';
 import { type Range, REPORT_TIMEZONE, wallClockIn, zonedTimeToUtc } from '@/utils/time';
 
 export interface Shift {
@@ -7,26 +8,50 @@ export interface Shift {
   endMinute: number;
 }
 
-export const WORK_SHIFTS: readonly Shift[] = [
-  { startHour: 9, startMinute: 0, endHour: 13, endMinute: 0 },
-  { startHour: 14, startMinute: 0, endHour: 18, endMinute: 0 },
-];
-
-export const WORK_DAYS: ReadonlySet<number> = new Set([1, 2, 3, 4, 5]);
-
-export const WORK_SECONDS_PER_DAY = WORK_SHIFTS.reduce(
-  (acc, shift) =>
-    acc + (shift.endHour * 60 + shift.endMinute - (shift.startHour * 60 + shift.startMinute)) * 60,
-  0,
-);
+export interface Schedule {
+  days: ReadonlySet<number>;
+  shifts: readonly Shift[];
+  holidays: ReadonlySet<string>;
+}
 
 const MAX_DAYS_SCANNED = 11_000;
 
-function isWorkDay(year: number, monthIndex: number, day: number): boolean {
-  return WORK_DAYS.has(new Date(Date.UTC(year, monthIndex, day)).getUTCDay());
+export function parseClock(value: string): { hour: number; minute: number } {
+  const [hour, minute] = value.split(':').map(Number);
+  return { hour: hour ?? 0, minute: minute ?? 0 };
 }
 
-export function workIntervalsInRange(range: Range, tz: string = REPORT_TIMEZONE): Range[] {
+export function buildSchedule(setting: WorkScheduleSetting, holidays: Iterable<string>): Schedule {
+  return {
+    days: new Set(setting.days),
+    shifts: setting.shifts.map((shift) => {
+      const start = parseClock(shift.from);
+      const end = parseClock(shift.to);
+      return {
+        startHour: start.hour,
+        startMinute: start.minute,
+        endHour: end.hour,
+        endMinute: end.minute,
+      };
+    }),
+    holidays: new Set(holidays),
+  };
+}
+
+function isoDate(year: number, monthIndex: number, day: number): string {
+  return new Date(Date.UTC(year, monthIndex, day)).toISOString().slice(0, 10);
+}
+
+function isWorkDay(schedule: Schedule, year: number, monthIndex: number, day: number): boolean {
+  if (!schedule.days.has(new Date(Date.UTC(year, monthIndex, day)).getUTCDay())) return false;
+  return !schedule.holidays.has(isoDate(year, monthIndex, day));
+}
+
+export function workIntervalsInRange(
+  range: Range,
+  schedule: Schedule,
+  tz: string = REPORT_TIMEZONE,
+): Range[] {
   const intervals: Range[] = [];
   if (range.to <= range.from) return intervals;
 
@@ -36,9 +61,9 @@ export function workIntervalsInRange(range: Range, tz: string = REPORT_TIMEZONE)
   for (let offset = 0; offset < MAX_DAYS_SCANNED; offset += 1) {
     const dayStart = zonedTimeToUtc(year, monthIndex, day + offset, 0, 0, tz);
     if (dayStart >= range.to) break;
-    if (!isWorkDay(year, monthIndex, day + offset)) continue;
+    if (!isWorkDay(schedule, year, monthIndex, day + offset)) continue;
 
-    for (const shift of WORK_SHIFTS) {
+    for (const shift of schedule.shifts) {
       const from = Math.max(
         zonedTimeToUtc(year, monthIndex, day + offset, shift.startHour, shift.startMinute, tz),
         range.from,
@@ -72,13 +97,4 @@ export function intersectWorkIntervals(range: Range, workIntervals: readonly Ran
 export function secondsOf(intervals: readonly Range[]): number {
   const ms = intervals.reduce((acc, interval) => acc + (interval.to - interval.from), 0);
   return Math.round(ms / 1000);
-}
-
-export function businessSecondsBetween(
-  from: number,
-  to: number,
-  tz: string = REPORT_TIMEZONE,
-): number {
-  if (to <= from) return 0;
-  return secondsOf(workIntervalsInRange({ from, to }, tz));
 }

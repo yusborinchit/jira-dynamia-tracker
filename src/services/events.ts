@@ -6,7 +6,12 @@ export interface IssueChangedEvent {
   occurredAt: string;
 }
 
-export type TrackerEvent = IssueChangedEvent;
+export interface ConfigChangedEvent {
+  type: 'config.changed';
+  section: string;
+}
+
+export type TrackerEvent = IssueChangedEvent | ConfigChangedEvent;
 
 type Listener = (event: TrackerEvent) => void;
 

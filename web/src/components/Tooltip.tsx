@@ -11,7 +11,13 @@ interface TooltipState {
   y: number;
 }
 
-const TooltipContext = createContext<((state: TooltipState | null) => void) | null>(null);
+interface TooltipControls {
+  show: (state: TooltipState) => void;
+  move: (x: number, y: number) => void;
+  hide: () => void;
+}
+
+const TooltipContext = createContext<TooltipControls | null>(null);
 
 export interface TooltipHandlers {
   onMouseEnter: (event: React.MouseEvent) => void;
@@ -19,28 +25,42 @@ export interface TooltipHandlers {
   onMouseLeave: () => void;
 }
 
-export function useTooltip(): (content: ReactNode) => TooltipHandlers {
-  const show = useContext(TooltipContext);
+type TooltipContent = ReactNode | (() => ReactNode);
+
+export function useTooltip(): (content: TooltipContent) => TooltipHandlers {
+  const controls = useContext(TooltipContext);
 
   return useCallback(
-    (content: ReactNode) => ({
-      onMouseEnter: (event) => show?.({ content, x: event.clientX, y: event.clientY }),
-      onMouseMove: (event) => show?.({ content, x: event.clientX, y: event.clientY }),
-      onMouseLeave: () => show?.(null),
+    (content: TooltipContent) => ({
+      onMouseEnter: (event) =>
+        controls?.show({
+          content: typeof content === 'function' ? content() : content,
+          x: event.clientX,
+          y: event.clientY,
+        }),
+      onMouseMove: (event) => controls?.move(event.clientX, event.clientY),
+      onMouseLeave: () => controls?.hide(),
     }),
-    [show],
+    [controls],
   );
 }
 
 export function TooltipProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<TooltipState | null>(null);
-  const show = useMemo(() => (next: TooltipState | null) => setState(next), []);
+  const controls = useMemo<TooltipControls>(
+    () => ({
+      show: setState,
+      move: (x, y) => setState((current) => (current ? { ...current, x, y } : current)),
+      hide: () => setState(null),
+    }),
+    [],
+  );
 
   const flipX = state !== null && state.x + CURSOR_OFFSET + MAX_WIDTH > window.innerWidth;
   const flipY = state !== null && state.y + CURSOR_OFFSET + ESTIMATED_HEIGHT > window.innerHeight;
 
   return (
-    <TooltipContext.Provider value={show}>
+    <TooltipContext.Provider value={controls}>
       {children}
       {state !== null &&
         createPortal(

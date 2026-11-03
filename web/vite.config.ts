@@ -22,6 +22,7 @@ export default defineConfig({
       '/health': 'http://localhost:3000',
       '/events': 'http://localhost:3000',
       '/issues': 'http://localhost:3000',
+      '/api': 'http://localhost:3000',
     },
   },
 });

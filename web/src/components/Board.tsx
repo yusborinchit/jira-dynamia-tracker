@@ -1,3 +1,4 @@
+import { AlertTriangleIcon } from 'lucide-react';
 import { memo, useMemo } from 'react';
 
 import { Avatar } from '@/components/Avatar';
@@ -6,21 +7,23 @@ import { jiraIssueUrl } from '@/lib/jira';
 import {
   categoryColor,
   categoryLabel,
+  categoryRank,
   currentCategoryOf,
+  formatDuration,
   type Issue,
+  isOverdue,
   type MonthlyReport,
   UNASSIGNED,
   UNCATEGORIZED,
 } from '@/lib/report';
-
-const BOARD_COLUMNS = ['pending', 'waiting_info', 'development', 'testing', 'deploy', 'done'];
 
 interface Column {
   category: string;
   issues: Issue[];
 }
 
-function buildColumns(issues: Issue[]): Column[] {
+function buildColumns(report: MonthlyReport): Column[] {
+  const { issues } = report;
   const byCategory = new Map<string, Issue[]>();
   for (const issue of issues) {
     const category = currentCategoryOf(issue);
@@ -29,8 +32,9 @@ function buildColumns(issues: Issue[]): Column[] {
     byCategory.set(category, bucket);
   }
 
-  const extra = [...byCategory.keys()].filter((category) => !BOARD_COLUMNS.includes(category));
-  const order = [...BOARD_COLUMNS.slice(0, -1), ...extra.sort(), 'done'];
+  const order = [
+    ...new Set([...report.categories.map((category) => category.key), ...byCategory.keys()]),
+  ].sort((a, b) => categoryRank(a) - categoryRank(b));
 
   return order.map((category) => ({
     category,
@@ -53,6 +57,7 @@ function BoardCard({
 }) {
   const openMenu = useIssueMenu();
   const assignee = issue.current_assignee_id ?? UNASSIGNED;
+  const overdue = isOverdue(issue);
 
   return (
     <li>
@@ -77,6 +82,21 @@ function BoardCard({
         <div className="mt-2 flex items-center gap-1.5 text-[11px] text-slate-500">
           <Avatar report={report} assignee={assignee} size={16} />
           <span className="truncate">{issue.current_assignee_name ?? 'Sin asignar'}</span>
+          {issue.current_work_seconds !== null && (
+            <span
+              className={`ml-auto inline-flex flex-none items-center gap-1 tabular-nums ${
+                overdue ? 'font-semibold text-amber-600' : 'text-slate-400'
+              }`}
+              title={
+                overdue
+                  ? 'Lleva más tiempo hábil del previsto en esta columna'
+                  : 'Tiempo hábil en el estado actual'
+              }
+            >
+              {overdue && <AlertTriangleIcon className="size-3" />}
+              {formatDuration(issue.current_work_seconds)}
+            </span>
+          )}
         </div>
       </a>
     </li>
@@ -84,7 +104,7 @@ function BoardCard({
 }
 
 export const Board = memo(function Board({ report }: { report: MonthlyReport }) {
-  const columns = useMemo(() => buildColumns(report.issues), [report.issues]);
+  const columns = useMemo(() => buildColumns(report), [report]);
 
   return (
     <div className="overflow-x-auto pb-2">

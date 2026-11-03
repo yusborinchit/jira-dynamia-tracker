@@ -6,6 +6,7 @@ import {
   tableFeatures,
   useTable,
 } from '@tanstack/react-table';
+import { AlertTriangleIcon } from 'lucide-react';
 import { memo, useMemo, useState } from 'react';
 
 import { Avatar } from '@/components/Avatar';
@@ -19,6 +20,7 @@ import {
   currentCategoryOf,
   formatDuration,
   type Issue,
+  isOverdue,
   type MonthlyReport,
   UNASSIGNED,
 } from '@/lib/report';
@@ -50,6 +52,15 @@ function StatusChip({ issue, report }: { issue: Issue; report: MonthlyReport }) 
         style={{ background: categoryColor(report, category) }}
       />
       {categoryLabel(category)}
+      {isOverdue(issue) && (
+        <span
+          className="inline-flex items-center gap-0.5 font-semibold text-amber-600"
+          title="Lleva más tiempo hábil del previsto en este estado"
+        >
+          <AlertTriangleIcon className="size-3" />
+          {formatDuration(issue.current_work_seconds ?? 0)}
+        </span>
+      )}
     </span>
   );
 }

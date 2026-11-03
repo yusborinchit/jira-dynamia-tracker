@@ -23,8 +23,6 @@ export function listStatusMappings(client: DbClient = db): StatusMappingRow[] {
   return client.select().from(statusMapping).all();
 }
 
-export const UNCATEGORIZED = 'uncategorized';
-
 export function normalizeStatusName(name: string | null | undefined): string {
   return (name ?? '').trim().toLowerCase();
 }

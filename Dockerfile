@@ -30,4 +30,4 @@ USER node
 ENV DATABASE_PATH=/data/jira-tracker.sqlite
 EXPOSE 3000
 
-CMD ["sh", "-c", "pnpm db:push && pnpm db:mapping && node dist/server.js"]
+CMD ["sh", "-c", "pnpm db:push && pnpm db:seed && node dist/server.js"]

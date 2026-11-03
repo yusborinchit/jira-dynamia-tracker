@@ -16,12 +16,45 @@ installed. The only call to the Jira API is moving a task from the dashboard (se
 
 ```bash
 pnpm install
-cp .env.example .env          # fill in JIRA_WEBHOOK_SECRET
+cp .env.example .env          # fill in JIRA_WEBHOOK_SECRET and APP_PASSWORD
 pnpm db:push                  # creates/updates the tables (no migrations)
-pnpm db:mapping               # loads the status-to-category mapping
+pnpm db:seed                  # inserts default categories, mappings and schedule if missing
 pnpm dev                      # API on :3000
-pnpm dev:web                  # dashboard on :5173, proxies /reports to :3000
+pnpm dev:web                  # dashboard on :5173, proxies the API to :3000
 ```
+
+## Login
+
+The dashboard and every API route except `/health` and `/webhooks/jira` need a session. There is
+one shared password, `APP_PASSWORD`; logging in sets an HttpOnly, SameSite=Lax cookie signed with
+a key derived from `APP_PASSWORD` and `JIRA_WEBHOOK_SECRET`, valid for 30 days. Changing either
+value logs everyone out. Ten failed attempts from the same IP lock that IP out for 15 minutes.
+
+## Configuration screens
+
+Everything that used to need a code change or a SQL query lives under **Configuración** in the
+sidebar:
+
+| Screen | What it does |
+|---|---|
+| Estados | Every Jira status seen, with a category picker. Unmapped ones are flagged in the sidebar. |
+| Categorías | Label, colour, role (active work, waiting, terminal), alert threshold and order. |
+| Horario y feriados | Working days, shifts and holidays, with a one-click load of Uruguay's. |
+| Personas | Display alias per person, and hiding someone from the current-work panel. |
+| Corregir historial | Edit, split or delete status and assignee segments of an issue. |
+| Importar de Jira | Rebuild an issue's history from its Jira changelog, by key or JQL. |
+| Webhooks | Every webhook received and what happened to it, with the raw body. |
+| Sistema | Webhook health, Jira credentials, database size and a backup download. |
+
+Configuration is applied on every query, like categories always were: changing the schedule,
+a mapping or a holiday recomputes the whole recorded history. Changes are pushed to open
+dashboards over the same SSE stream (`config.changed`).
+
+Deleting a segment hands its time to the previous one, and if the previous and next segments
+are the same status they merge, which is exactly what a misclick needs. Importing from Jira
+replaces the stored history of that issue, including manual corrections; it only reads from Jira.
+
+`Ctrl/Cmd + K` opens a palette to jump to any page, filter by an issue, or open its history.
 
 To open a task in Jira from the dashboard, set its public base URL in `.env` and restart the web
 build/server:
@@ -44,8 +77,8 @@ JIRA_BASE_URL=https://tu-equipo.atlassian.net   # optional, defaults to VITE_JIR
 
 The server asks Jira for the available transitions (`GET /issues/:key/transitions`) and runs the
 chosen one (`POST /issues/:key/transitions`). It does not write to the database: Jira sends the
-usual webhook, which records the change and refreshes the dashboard over SSE. There is no login,
-so anyone who can open the dashboard can move tasks.
+usual webhook, which records the change and refreshes the dashboard over SSE. The dashboard shows
+the new column right away and the webhook confirms it.
 
 In production a single process serves both: `pnpm build` builds the web bundle and the server, and
 Fastify serves `web/dist` at `/`. Without a web build the server still runs — it logs
@@ -92,8 +125,7 @@ The server-rendered view stays available at `/reports/monthly?month=YYYY-MM&form
 printing or PDF — it is A4 landscape, uses the calendar axis, and does not depend on JavaScript.
 
 Category colours and the working schedule come from the API (`category_colors`, `work_schedule`)
-so `src/db/status-mapping.data.ts` and `src/utils/business-hours.ts` stay the single source of
-truth for both views.
+so the database stays the single source of truth for both views.
 
 ## Lint and formatting
 
@@ -109,18 +141,18 @@ TypeScript 7 yet, and Biome parses TypeScript with its own parser.
 
 ## Working hours
 
-Only time that falls inside working hours is counted: **Monday to Friday, 09:00–13:00 and
-14:00–18:00** in `REPORT_TIMEZONE` (`America/Montevideo`). Nights, weekends and the lunch break
+Only time that falls inside working hours is counted. By default that is **Monday to Friday,
+09:00–13:00 and 14:00–18:00** in `REPORT_TIMEZONE` (`America/Montevideo`). Nights, weekends and the lunch break
 add nothing. An issue left in "En curso" on Friday at 18:00 does not accumulate again until
 Monday at 09:00.
 
-The schedule lives in `src/utils/business-hours.ts` (`WORK_SHIFTS`, `WORK_DAYS`) and applies to
-every status, regardless of category, so the whole report is expressed in the same unit.
+The schedule and holidays are edited in the Horario y feriados screen and apply to every status, regardless of category, so the whole report is expressed in the same unit.
 
 Like categories, the clipping happens **on every query**, not when the webhook arrives: changing
 the schedule recalculates the whole recorded history. Nothing about `status_history` changes.
 
-Public holidays are not handled — only Saturdays and Sundays are excluded.
+Holidays count like weekends. The Uruguay preset loads the five non-working holidays plus
+Carnaval and Semana de Turismo, computed from Easter.
 
 ### Concurrent issues
 
@@ -190,7 +222,7 @@ The `done` category is **terminal**: the task died there, so its segment comes b
 `"terminal": true`, `"seconds": 0` and an empty `work_intervals`, and adds to no total. An issue
 whose only segment in the month is terminal does not appear in the report at all (finished in
 July, it does not pollute August). Terminal categories are configured in `TERMINAL_CATEGORIES`,
-in `src/db/status-mapping.data.ts`.
+in the Categorías screen (role *Final*).
 
 ```jsonc
 {
@@ -260,22 +292,10 @@ names stay exactly as Jira writes them; categories are always in English.
 | Testing · Validar | `testing` |
 | Listo · Done · Hecho | `done` (terminal) |
 
-The source of truth is `src/db/status-mapping.data.ts`. To add a status or change its category,
-edit that file and run:
-
-```bash
-pnpm db:mapping
-```
-
-It is idempotent: it inserts what is missing, updates what changed, and leaves alone any rows
-added by hand outside the file. In Docker it runs on every boot.
-
-Statuses show up on their own in the `statuses` table as they appear, so that is where to look
-for anything left unmapped:
-
-```sql
-SELECT * FROM statuses;
-```
+Mappings are edited in the Estados screen. `src/db/defaults.ts` only holds the starting
+values: `pnpm db:seed` inserts the categories, mappings and schedule that are missing and never
+touches existing rows, so edits made in the UI survive every boot. In Docker it runs on every
+boot. Statuses show up on their own as webhooks arrive; the sidebar badge counts the unmapped ones.
 
 An unmapped status is reported as `uncategorized` (the time is not lost, just unclassified).
 
@@ -297,19 +317,18 @@ mapping recategorizes the entire recorded history too.
   Recorded from the first webhook onwards: there is no backfill, so issues that existed before
   this table count as unassigned until they next move.
 - **`statuses`** — catalogue of statuses seen, fills itself in.
-- **`status_mapping`** — Jira status → internal category. Loaded with `pnpm db:mapping`.
+- **`category_settings`** — label, colour, role, alert threshold and order of each category.
+- **`app_settings`** — one row with the working days and shifts.
+- **`holidays`** — dates that add no working time.
+- **`people`** — display alias and visibility per Jira account.
+- **`webhook_events`** — the last 2000 webhooks with their outcome; Jira retries of the same
+  body are grouped by `fingerprint` and counted in `duplicate_count`.
+- **`status_mapping`** — Jira status → internal category. Edited in the Estados screen.
 
 `pnpm db:studio` opens the Drizzle viewer for all of this.
 
 ## Later on
 
-The architecture (routes / services / repositories) is meant to grow without touching what is
-already there: React dashboard, Excel/CSV export, per-sprint or per-developer metrics, filters by
-project and date, public holidays in the working-hours calendar. None of that is implemented yet.
-
-Two known limits worth knowing before extending it:
-
-- The report endpoint is month-scoped. `buildMonthlyReport` already works internally on a `Range`,
-  so accepting `?from=&to=` for arbitrary ranges is a small change — it is the one filter that
-  cannot be done client-side.
-- Nothing is authenticated. The webhook has a shared secret; `/reports` and the dashboard do not.
+- The report endpoint is month- or day-scoped. `buildReport` already works on a `Range`, so
+  accepting `?from=&to=` for arbitrary ranges is a small change.
+- Login is one shared password, so moves and edits are not attributed to a person.

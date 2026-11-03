@@ -1,5 +1,7 @@
 import { queryOptions } from '@tanstack/react-query';
 
+import { ApiError, api } from '@/lib/api';
+
 export interface IssueTransition {
   id: string;
   name: string;
@@ -22,31 +24,40 @@ const ERROR_MESSAGES: Record<string, string> = {
   jira_unreachable: 'No se pudo conectar con Jira.',
 };
 
-async function readError(response: Response): Promise<Error> {
-  const body = (await response.json().catch(() => null)) as { error?: string } | null;
-  const code = body?.error ?? '';
-  return new Error(ERROR_MESSAGES[code] ?? `Jira respondió con un error (${response.status}).`);
+function friendly(error: unknown): Error {
+  if (error instanceof ApiError) {
+    return new Error(
+      ERROR_MESSAGES[error.code] ?? `Jira respondió con un error (${error.status}).`,
+    );
+  }
+  return error instanceof Error ? error : new Error('No se pudo conectar con Jira.');
 }
 
 export function transitionsQuery(issueKey: string) {
   return queryOptions({
     queryKey: ['transitions', issueKey] as const,
-    queryFn: async (): Promise<IssueTransitions> => {
-      const response = await fetch(`/issues/${encodeURIComponent(issueKey)}/transitions`);
-      if (!response.ok) throw await readError(response);
-      return response.json() as Promise<IssueTransitions>;
+    queryFn: async ({ signal }): Promise<IssueTransitions> => {
+      try {
+        return await api<IssueTransitions>(`/issues/${encodeURIComponent(issueKey)}/transitions`, {
+          signal,
+        });
+      } catch (error) {
+        throw friendly(error);
+      }
     },
-    staleTime: 0,
-    gcTime: 60_000,
+    staleTime: 60_000,
+    gcTime: 5 * 60_000,
     retry: false,
   });
 }
 
 export async function moveIssue(issueKey: string, transitionId: string): Promise<void> {
-  const response = await fetch(`/issues/${encodeURIComponent(issueKey)}/transitions`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ transitionId }),
-  });
-  if (!response.ok) throw await readError(response);
+  try {
+    await api(`/issues/${encodeURIComponent(issueKey)}/transitions`, {
+      method: 'POST',
+      body: { transitionId },
+    });
+  } catch (error) {
+    throw friendly(error);
+  }
 }

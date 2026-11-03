@@ -1,4 +1,5 @@
-import { type ReactNode, useState } from 'react';
+import { LoaderCircleIcon } from 'lucide-react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 
 import { Avatar } from '@/components/Avatar';
 import {
@@ -36,6 +37,39 @@ function periodLabel(date: string, span: Span): string {
   const [year, month, day] = date.split('-').map(Number);
   const utc = new Date(Date.UTC(year ?? 1970, (month ?? 1) - 1, day ?? 1));
   return capitalize(span === 'month' ? MONTH_FMT.format(utc) : DAY_FMT.format(utc));
+}
+
+const SEARCH_DEBOUNCE_MS = 250;
+
+function SearchField({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  const [draft, setDraft] = useState(value);
+  const lastSent = useRef(value);
+
+  useEffect(() => {
+    if (value !== lastSent.current) {
+      lastSent.current = value;
+      setDraft(value);
+    }
+  }, [value]);
+
+  useEffect(() => {
+    if (draft === lastSent.current) return;
+    const timer = setTimeout(() => {
+      lastSent.current = draft;
+      onChange(draft);
+    }, SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [draft, onChange]);
+
+  return (
+    <input
+      type="search"
+      value={draft}
+      onChange={(event) => setDraft(event.target.value)}
+      placeholder="Buscar issue, resumen, estado o persona…"
+      className="min-w-56 flex-1 rounded-none border border-slate-300 px-3 py-1.5 text-sm outline-none focus:border-slate-500"
+    />
+  );
 }
 
 function Toggle({
@@ -97,6 +131,7 @@ interface FilterBarProps {
   assigneeTotals: Record<string, number> | undefined;
   onExport: (() => Promise<void>) | undefined;
   showCategories?: boolean;
+  loading?: boolean;
   onChange: (next: {
     date?: string;
     span?: Span;
@@ -128,9 +163,13 @@ export function FilterBar({
   assigneeTotals,
   onExport,
   showCategories = true,
+  loading = false,
   onChange,
 }: FilterBarProps) {
   const [isExporting, setIsExporting] = useState(false);
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+  const searchChanged = useRef((value: string) => onChangeRef.current({ search: value })).current;
 
   const cycle = (
     included: string[],
@@ -213,13 +252,13 @@ export function FilterBar({
           </button>
         </div>
 
-        <input
-          type="search"
-          value={search}
-          onChange={(event) => onChange({ search: event.target.value })}
-          placeholder="Buscar issue, resumen, estado o persona…"
-          className="min-w-56 flex-1 rounded-none border border-slate-300 px-3 py-1.5 text-sm outline-none focus:border-slate-500"
-        />
+        <span className="flex size-4 items-center text-slate-400" aria-live="polite">
+          {loading && (
+            <LoaderCircleIcon className="size-4 animate-spin" aria-label="Actualizando" />
+          )}
+        </span>
+
+        <SearchField value={search} onChange={searchChanged} />
 
         <button
           type="button"

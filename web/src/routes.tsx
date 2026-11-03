@@ -1,43 +1,25 @@
-import { useQuery } from '@tanstack/react-query';
+import type { QueryClient } from '@tanstack/react-query';
 import {
-  createRootRoute,
+  createRootRouteWithContext,
   createRoute,
   createRouter,
+  lazyRouteComponent,
   Outlet,
-  useNavigate,
-  useSearch,
+  redirect,
 } from '@tanstack/react-router';
-import { useCallback, useDeferredValue, useMemo } from 'react';
 import { z } from 'zod';
-import { Board } from '@/components/Board';
-import {
-  ContinuityView,
-  continuityTargets,
-  defaultContinuityTarget,
-} from '@/components/ContinuityView';
-import { DayView } from '@/components/DayView';
-import { FilterBar } from '@/components/FilterBar';
-import { Gantt } from '@/components/Gantt';
-import { IssueMenuProvider } from '@/components/IssueMenu';
-import { IssueTable } from '@/components/IssueTable';
-import { TeamStatus } from '@/components/TeamStatus';
-import { ThemeToggle } from '@/components/ThemeToggle';
-import { TimelineLegend } from '@/components/TimelineLegend';
-import { TooltipProvider } from '@/components/Tooltip';
-import type { ContinuityTarget } from '@/lib/continuity';
-import { downloadReportExcel } from '@/lib/excel';
-import { applyFilters, isFiltered } from '@/lib/filters';
-import { type LiveStatus, useLiveReports } from '@/lib/live';
-import {
-  allAssignees,
-  allCategories,
-  allProjects,
-  currentDate,
-  reportQuery,
-  type Span,
-} from '@/lib/report';
 
-const searchSchema = z.object({
+import { AppShell } from '@/components/layout/AppShell';
+import { TooltipProvider } from '@/components/Tooltip';
+import { Toaster } from '@/components/ui/sonner';
+import { sessionQuery } from '@/lib/auth';
+import { LoginPage } from '@/pages/LoginPage';
+import { BoardPage } from '@/pages/reports/BoardPage';
+import { ContinuityPage } from '@/pages/reports/ContinuityPage';
+import { ReportsLayout } from '@/pages/reports/ReportsLayout';
+import { TimelinePage } from '@/pages/reports/TimelinePage';
+
+export const reportSearchSchema = z.object({
   date: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
@@ -55,332 +37,179 @@ const searchSchema = z.object({
   order: z.enum(['default', 'current_status']).optional(),
 });
 
-const rootRoute = createRootRoute({
+export type ReportSearch = z.infer<typeof reportSearchSchema>;
+
+interface RouterContext {
+  queryClient: QueryClient;
+}
+
+const rootRoute = createRootRouteWithContext<RouterContext>()({
   component: () => (
     <TooltipProvider>
-      <div className="theme-shell min-h-screen bg-white text-slate-900">
+      <div className="theme-shell min-h-screen bg-background text-foreground">
         <Outlet />
       </div>
+      <Toaster />
     </TooltipProvider>
   ),
 });
 
-const TIMELINE_TITLE: Record<Span, string> = {
-  day: 'Cronología del día',
-  month: 'Línea de tiempo',
-};
-
-const LIVE_LABEL: Record<LiveStatus, string> = {
-  connecting: 'conectando…',
-  live: 'en vivo',
-  offline: 'sin conexión',
-};
-
-const LIVE_DOT: Record<LiveStatus, string> = {
-  connecting: 'bg-amber-400',
-  live: 'bg-emerald-500',
-  offline: 'bg-slate-300',
-};
-
-function LiveIndicator({ status }: { status: LiveStatus }) {
-  return (
-    <span className="flex items-center gap-1.5 text-xs text-slate-400">
-      <span className={`size-1.5 rounded-none ${LIVE_DOT[status]}`} />
-      {LIVE_LABEL[status]}
-    </span>
-  );
-}
-
-function Dashboard() {
-  const search = useSearch({ from: '/' });
-  const navigate = useNavigate({ from: '/' });
-
-  const date = search.date ?? currentDate();
-  const span: Span = search.span ?? 'month';
-  const filters = useMemo(
-    () => ({
-      projects: search.projects ?? [],
-      excludedProjects: search.excludedProjects ?? [],
-      categories: search.categories ?? [],
-      excludedCategories: search.excludedCategories ?? [],
-      assignees: search.assignees ?? [],
-      excludedAssignees: search.excludedAssignees ?? [],
-      search: search.search ?? '',
-    }),
-    [
-      search.assignees,
-      search.categories,
-      search.excludedAssignees,
-      search.excludedCategories,
-      search.excludedProjects,
-      search.projects,
-      search.search,
-    ],
-  );
-  const deferredFilters = useDeferredValue(filters);
-  const timelineView = search.view ?? 'issues';
-  const issueOrder = search.order ?? 'default';
-
-  const { data, isPending, isError, error, isFetching } = useQuery(reportQuery(date, span));
-  const liveStatus = useLiveReports();
-
-  const update = useCallback(
-    (next: {
-      date?: string;
-      span?: Span;
-      projects?: string[];
-      excludedProjects?: string[];
-      categories?: string[];
-      excludedCategories?: string[];
-      assignees?: string[];
-      excludedAssignees?: string[];
-      search?: string;
-      view?: 'issues' | 'continuity' | 'board';
-      focus?: string;
-      order?: 'default' | 'current_status';
-    }) => {
-      navigate({
-        search: (previous) => {
-          const merged = { ...previous, ...next };
-          return {
-            date: merged.date ?? date,
-            span: merged.span,
-            projects: merged.projects?.length ? merged.projects : undefined,
-            excludedProjects: merged.excludedProjects?.length ? merged.excludedProjects : undefined,
-            categories: merged.categories?.length ? merged.categories : undefined,
-            excludedCategories: merged.excludedCategories?.length
-              ? merged.excludedCategories
-              : undefined,
-            assignees: merged.assignees?.length ? merged.assignees : undefined,
-            excludedAssignees: merged.excludedAssignees?.length
-              ? merged.excludedAssignees
-              : undefined,
-            search: merged.search ? merged.search : undefined,
-            view: merged.view === 'issues' ? undefined : merged.view,
-            focus: merged.focus ? merged.focus : undefined,
-            order: merged.order === 'current_status' ? merged.order : undefined,
-          };
-        },
-        replace: true,
-      });
-    },
-    [date, navigate],
-  );
-
-  const effectiveFilters = useMemo(
-    () =>
-      timelineView === 'continuity'
-        ? { ...deferredFilters, categories: [], excludedCategories: [] }
-        : deferredFilters,
-    [deferredFilters, timelineView],
-  );
-  const view = useMemo(
-    () => (data ? applyFilters(data, effectiveFilters) : undefined),
-    [data, effectiveFilters],
-  );
-  const highlight = isFiltered(deferredFilters) ? view?.matches : undefined;
-  const timelineReport = useMemo(() => {
-    if (!view || !data) return undefined;
-    const base =
-      deferredFilters.assignees.length > 0 || deferredFilters.excludedAssignees.length > 0
-        ? view.report
-        : data;
-    if (!isFiltered(deferredFilters)) return base;
-    return { ...base, issues: base.issues.filter((issue) => view.matches(issue.issue_key)) };
-  }, [data, deferredFilters, view]);
-  const selectIssue = useCallback((issueKey: string) => update({ search: issueKey }), [update]);
-  const changeFocus = useCallback(
-    (target: ContinuityTarget) => update({ focus: `${target.kind}:${target.value}` }),
-    [update],
-  );
-  const fallbackTarget = data ? defaultContinuityTarget(data) : null;
-  const requestedTarget: ContinuityTarget | null = search.focus
-    ? {
-        kind: search.focus.startsWith('status:') ? 'status' : 'category',
-        value: search.focus.slice(search.focus.indexOf(':') + 1),
-      }
-    : null;
-  const focusTarget =
-    data &&
-    requestedTarget &&
-    continuityTargets(data).some(
-      (target) => target.kind === requestedTarget.kind && target.value === requestedTarget.value,
-    )
-      ? requestedTarget
-      : fallbackTarget;
-
-  return (
-    <IssueMenuProvider onFilterIssue={selectIssue}>
-      <div className="mx-auto flex max-w-[1400px] flex-col gap-6 p-6">
-        <header className="flex flex-col gap-4 border-b-2 border-slate-900 pb-4">
-          <div className="flex items-baseline justify-between gap-4">
-            <h1 className="text-xl font-semibold tracking-tight">Jira Tracker</h1>
-            <div className="flex items-center gap-3">
-              {isFetching && <span className="text-xs text-slate-400">actualizando…</span>}
-              <LiveIndicator status={liveStatus} />
-              <ThemeToggle />
-            </div>
-          </div>
-
-          {data && <TeamStatus report={data} />}
-
-          <FilterBar
-            report={data}
-            date={date}
-            span={span}
-            projects={filters.projects}
-            excludedProjects={filters.excludedProjects}
-            categories={filters.categories}
-            excludedCategories={filters.excludedCategories}
-            assignees={filters.assignees}
-            excludedAssignees={filters.excludedAssignees}
-            search={filters.search}
-            availableProjects={data ? allProjects(data) : []}
-            availableCategories={data ? allCategories(data) : []}
-            availableAssignees={data ? allAssignees(data) : []}
-            categoryTotals={view?.report.totals_by_category}
-            assigneeTotals={view?.report.totals_by_assignee}
-            onExport={
-              view
-                ? () => downloadReportExcel(view.report, deferredFilters, view.matches)
-                : undefined
-            }
-            showCategories={timelineView !== 'continuity'}
-            onChange={update}
-          />
-        </header>
-
-        {isPending && <p className="py-16 text-center text-slate-500">Cargando…</p>}
-
-        {isError && (
-          <p className="py-16 text-center text-red-600">
-            No se pudo cargar el reporte: {(error as Error).message}
-          </p>
-        )}
-
-        {data && view && (
-          <>
-            {view.report.issues.length === 0 ? (
-              <p className="py-16 text-center text-slate-500">
-                No hay actividad registrada en este período.
-              </p>
-            ) : (
-              <>
-                <section>
-                  <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                    <h2 className="text-sm font-semibold tracking-tight">
-                      {timelineView === 'continuity'
-                        ? 'Continuidad del trabajo'
-                        : timelineView === 'board'
-                          ? 'Tablero'
-                          : TIMELINE_TITLE[span]}
-                    </h2>
-                    <div className="flex items-center gap-2">
-                      <fieldset
-                        className="inline-flex rounded-none border border-slate-300 p-0.5"
-                        aria-label="Vista de cronología"
-                      >
-                        {(
-                          [
-                            ['issues', 'Por issue'],
-                            ['continuity', 'Continuidad'],
-                            ['board', 'Tablero'],
-                          ] as const
-                        ).map(([value, label]) => (
-                          <button
-                            key={value}
-                            type="button"
-                            onClick={() => update({ view: value })}
-                            className={`rounded-none px-2.5 py-1 text-xs transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-500 ${
-                              timelineView === value
-                                ? 'bg-slate-800 text-white'
-                                : 'text-slate-600 hover:bg-slate-100'
-                            }`}
-                          >
-                            {label}
-                          </button>
-                        ))}
-                      </fieldset>
-                      {timelineView === 'issues' && span === 'month' && (
-                        <label className="flex items-center gap-1.5 text-xs text-slate-600">
-                          Ordenar
-                          <select
-                            value={issueOrder}
-                            onChange={(event) =>
-                              update({ order: event.target.value as 'default' | 'current_status' })
-                            }
-                            className="border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-500"
-                          >
-                            <option value="default">Orden original</option>
-                            <option value="current_status">Estado actual</option>
-                          </select>
-                        </label>
-                      )}
-                    </div>
-                  </div>
-                  {timelineView === 'issues' && <TimelineLegend report={data} span={span} />}
-                  {view.matchedIssues === 0 && (
-                    <p className="pb-2 text-xs text-slate-500">
-                      {timelineView === 'continuity'
-                        ? 'Ningún issue coincide con los filtros; no hay continuidad para mostrar.'
-                        : 'Ningún issue coincide con el filtro.'}
-                    </p>
-                  )}
-                  {timelineView === 'continuity' && focusTarget ? (
-                    <ContinuityView
-                      report={view.report}
-                      target={focusTarget}
-                      matches={view.matches}
-                      assignees={deferredFilters.assignees}
-                      onTargetChange={changeFocus}
-                    />
-                  ) : !timelineReport ||
-                    timelineReport.issues.length === 0 ? null : timelineView === 'board' ? (
-                    <Board report={timelineReport} />
-                  ) : span === 'day' ? (
-                    <DayView report={timelineReport} matches={highlight} />
-                  ) : (
-                    <Gantt
-                      report={timelineReport}
-                      matches={highlight}
-                      orderByStatus={issueOrder === 'current_status'}
-                    />
-                  )}
-                </section>
-
-                <section>
-                  <h2 className="mb-2 text-sm font-semibold tracking-tight">Detalle por issue</h2>
-                  {timelineReport && timelineReport.issues.length > 0 && (
-                    <IssueTable report={timelineReport} matches={highlight} />
-                  )}
-                </section>
-              </>
-            )}
-
-            <footer className="border-t border-slate-200 pt-3 text-[11px] text-slate-400">
-              Solo se cuenta el tiempo dentro del horario laboral: lunes a viernes,{' '}
-              {data.work_schedule.shifts.join(' y ')} ({data.work_schedule.timezone}).
-            </footer>
-          </>
-        )}
-      </div>
-    </IssueMenuProvider>
-  );
-}
-
-const indexRoute = createRoute({
+const loginRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: '/',
-  validateSearch: searchSchema,
-  component: Dashboard,
+  path: '/login',
+  validateSearch: z.object({ redirect: z.string().optional() }),
+  beforeLoad: async ({ context, search }) => {
+    const session = await context.queryClient.ensureQueryData(sessionQuery);
+    if (session.authenticated) throw redirect({ href: search.redirect ?? '/' });
+  },
+  component: LoginPage,
 });
 
-const routeTree = rootRoute.addChildren([indexRoute]);
+const appRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  id: '_app',
+  beforeLoad: async ({ context, location }) => {
+    const session = await context.queryClient.ensureQueryData(sessionQuery);
+    if (!session.authenticated) {
+      throw redirect({ to: '/login', search: { redirect: location.href } });
+    }
+  },
+  component: AppShell,
+});
 
-export const router = createRouter({ routeTree });
+const reportsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  id: '_reports',
+  validateSearch: reportSearchSchema,
+  component: ReportsLayout,
+});
+
+const LEGACY_VIEW_PATHS = { continuity: '/continuity', board: '/board' } as const;
+
+const timelineRoute = createRoute({
+  getParentRoute: () => reportsRoute,
+  path: '/',
+  beforeLoad: ({ search }) => {
+    if (search.view === 'continuity' || search.view === 'board') {
+      throw redirect({
+        to: LEGACY_VIEW_PATHS[search.view],
+        search: { ...search, view: undefined },
+      });
+    }
+  },
+  component: TimelinePage,
+});
+
+const continuityRoute = createRoute({
+  getParentRoute: () => reportsRoute,
+  path: '/continuity',
+  component: ContinuityPage,
+});
+
+const boardRoute = createRoute({
+  getParentRoute: () => reportsRoute,
+  path: '/board',
+  component: BoardPage,
+});
+
+const settingsIndexRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: '/settings',
+  beforeLoad: () => {
+    throw redirect({ to: '/settings/statuses' });
+  },
+});
+
+const statusesRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: '/settings/statuses',
+  component: lazyRouteComponent(() => import('@/pages/settings/StatusesPage'), 'StatusesPage'),
+});
+
+const categoriesRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: '/settings/categories',
+  component: lazyRouteComponent(() => import('@/pages/settings/CategoriesPage'), 'CategoriesPage'),
+});
+
+const scheduleRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: '/settings/schedule',
+  component: lazyRouteComponent(() => import('@/pages/settings/SchedulePage'), 'SchedulePage'),
+});
+
+const peopleRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: '/settings/people',
+  component: lazyRouteComponent(() => import('@/pages/settings/PeoplePage'), 'PeoplePage'),
+});
+
+const importRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: '/settings/import',
+  component: lazyRouteComponent(() => import('@/pages/settings/ImportPage'), 'ImportPage'),
+});
+
+const systemRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: '/settings/system',
+  component: lazyRouteComponent(() => import('@/pages/settings/SystemPage'), 'SystemPage'),
+});
+
+const historyRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: '/settings/history',
+  validateSearch: z.object({ q: z.string().optional() }),
+  component: lazyRouteComponent(() => import('@/pages/settings/HistoryPage'), 'HistoryPage'),
+});
+
+const historyDetailRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: '/settings/history/$issueKey',
+  component: lazyRouteComponent(
+    () => import('@/pages/settings/HistoryDetailPage'),
+    'HistoryDetailPage',
+  ),
+});
+
+const webhooksRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: '/settings/webhooks',
+  validateSearch: z.object({
+    outcome: z.string().optional(),
+    issue: z.string().optional(),
+  }),
+  component: lazyRouteComponent(() => import('@/pages/settings/WebhooksPage'), 'WebhooksPage'),
+});
+
+const routeTree = rootRoute.addChildren([
+  loginRoute,
+  appRoute.addChildren([
+    reportsRoute.addChildren([timelineRoute, continuityRoute, boardRoute]),
+    settingsIndexRoute,
+    statusesRoute,
+    categoriesRoute,
+    scheduleRoute,
+    peopleRoute,
+    historyRoute,
+    historyDetailRoute,
+    importRoute,
+    webhooksRoute,
+    systemRoute,
+  ]),
+]);
+
+export function createAppRouter(queryClient: QueryClient) {
+  return createRouter({
+    routeTree,
+    context: { queryClient },
+    defaultPreload: 'intent',
+    defaultPreloadStaleTime: 0,
+  });
+}
 
 declare module '@tanstack/react-router' {
   interface Register {
-    router: typeof router;
+    router: ReturnType<typeof createAppRouter>;
   }
 }

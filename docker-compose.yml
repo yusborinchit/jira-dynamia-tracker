@@ -8,6 +8,7 @@ services:
       PORT: 3000
       DATABASE_PATH: /data/jira-tracker.sqlite
       JIRA_WEBHOOK_SECRET: ${JIRA_WEBHOOK_SECRET:?JIRA_WEBHOOK_SECRET is required}
+      APP_PASSWORD: ${APP_PASSWORD:?APP_PASSWORD is required}
       JIRA_BASE_URL: ${JIRA_BASE_URL:-${VITE_JIRA_BASE_URL:-}}
       JIRA_EMAIL: ${JIRA_EMAIL:-}
       JIRA_API_TOKEN: ${JIRA_API_TOKEN:-}
