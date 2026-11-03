@@ -31,6 +31,7 @@ export interface Issue {
   issue_key: string;
   project_key: string;
   summary: string | null;
+  current_status_id: string | null;
   current_status_name: string | null;
   current_category: string | null;
   current_assignee_id: string | null;

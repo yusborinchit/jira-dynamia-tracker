@@ -300,7 +300,7 @@ export const DayView = memo(function DayView({
                 href={jiraIssueUrl(block.issueKey) ?? undefined}
                 target="_blank"
                 rel="noreferrer"
-                onClick={openMenu(block.issueKey)}
+                {...openMenu(block.issueKey)}
                 className="absolute flex cursor-pointer items-center overflow-hidden rounded-none px-1.5 text-[10px] leading-none text-white/95"
                 style={{
                   opacity: dimmed(block) ? DIMMED_OPACITY : 1,

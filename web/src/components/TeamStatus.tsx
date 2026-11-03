@@ -57,7 +57,7 @@ export function TeamStatus({ report }: { report: MonthlyReport }) {
                         rel="noreferrer"
                         className="w-full truncate text-left hover:text-slate-950 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-500"
                         title={`${issue.issue_key}${issue.summary ? ` · ${issue.summary}` : ''}`}
-                        onClick={openMenu(issue.issue_key)}
+                        {...openMenu(issue.issue_key)}
                       >
                         <span className="font-mono font-semibold text-slate-700">
                           {issue.issue_key}

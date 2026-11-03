@@ -32,6 +32,7 @@ export interface IssueTransition {
 }
 
 export interface IssueTransitions {
+  current_status_id: string | null;
   current_status_name: string | null;
   transitions: IssueTransition[];
 }
@@ -84,18 +85,31 @@ async function jiraRequest(path: string, init: RequestInit = {}): Promise<unknow
   return response.status === 204 ? null : response.json();
 }
 
-export async function fetchTransitions(issueKey: string): Promise<IssueTransitions> {
+export interface KnownStatus {
+  id: string;
+  name: string;
+}
+
+async function fetchCurrentStatus(key: string): Promise<KnownStatus | null> {
+  const raw = await jiraRequest(`/issue/${key}?fields=status`);
+  return issueStatusSchema.parse(raw).fields.status ?? null;
+}
+
+export async function fetchTransitions(
+  issueKey: string,
+  known: KnownStatus | null = null,
+): Promise<IssueTransitions> {
   const key = encodeURIComponent(issueKey);
-  const [rawTransitions, rawIssue] = await Promise.all([
+  const [rawTransitions, current] = await Promise.all([
     jiraRequest(`/issue/${key}/transitions`),
-    jiraRequest(`/issue/${key}?fields=status`),
+    known ? Promise.resolve(known) : fetchCurrentStatus(key),
   ]);
 
   const { transitions } = transitionsSchema.parse(rawTransitions);
-  const current = issueStatusSchema.parse(rawIssue).fields.status ?? null;
   const config = getConfig();
 
   return {
+    current_status_id: current?.id ?? null,
     current_status_name: current?.name ?? null,
     transitions: transitions
       .filter((transition) => transition.isAvailable !== false)

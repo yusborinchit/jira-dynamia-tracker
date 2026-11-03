@@ -1,11 +1,27 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 
-import { fetchTransitions, JiraError, transitionIssue } from '@/services/jira-client';
+import { findIssueByKey } from '@/repositories/issue.repository';
+import {
+  fetchTransitions,
+  JiraError,
+  type KnownStatus,
+  transitionIssue,
+} from '@/services/jira-client';
 
 const paramsSchema = z.object({
   issueKey: z.string().regex(/^[A-Z][A-Z0-9_]*-\d+$/, 'expected an issue key like ABC-123'),
 });
+
+const transitionsQuerySchema = z.object({
+  fresh: z.enum(['0', '1']).optional(),
+});
+
+function knownStatusOf(issueKey: string): KnownStatus | null {
+  const issue = findIssueByKey(issueKey);
+  if (!issue?.currentStatusId || !issue.currentStatusName) return null;
+  return { id: issue.currentStatusId, name: issue.currentStatusName };
+}
 
 const bodySchema = z.object({
   transitionId: z.string().regex(/^\d+$/),
@@ -41,8 +57,11 @@ export async function transitionRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(400).send({ error: 'invalid_issue_key' });
     }
 
+    const fresh = transitionsQuerySchema.safeParse(request.query).data?.fresh === '1';
+    const { issueKey } = params.data;
+
     try {
-      return reply.send(await fetchTransitions(params.data.issueKey));
+      return reply.send(await fetchTransitions(issueKey, fresh ? null : knownStatusOf(issueKey)));
     } catch (error) {
       return sendJiraError(request, reply, error, params.data.issueKey);
     }

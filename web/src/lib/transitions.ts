@@ -1,6 +1,7 @@
-import { queryOptions } from '@tanstack/react-query';
+import { type QueryClient, queryOptions } from '@tanstack/react-query';
 
 import { ApiError, api } from '@/lib/api';
+import type { MonthlyReport } from '@/lib/report';
 
 export interface IssueTransition {
   id: string;
@@ -12,6 +13,7 @@ export interface IssueTransition {
 }
 
 export interface IssueTransitions {
+  current_status_id: string | null;
   current_status_name: string | null;
   transitions: IssueTransition[];
 }
@@ -33,22 +35,70 @@ function friendly(error: unknown): Error {
   return error instanceof Error ? error : new Error('No se pudo conectar con Jira.');
 }
 
-export function transitionsQuery(issueKey: string) {
+const TRANSITIONS_CACHE_MS = 60 * 60_000;
+
+export interface TransitionContext {
+  issueKey: string;
+  projectKey: string | null;
+  statusId: string | null;
+}
+
+export function issueContext(queryClient: QueryClient, issueKey: string): TransitionContext {
+  for (const [, report] of queryClient.getQueriesData<MonthlyReport>({ queryKey: ['report'] })) {
+    const issue = report?.issues.find((candidate) => candidate.issue_key === issueKey);
+    if (issue) {
+      return {
+        issueKey,
+        projectKey: issue.project_key || null,
+        statusId: issue.current_status_id,
+      };
+    }
+  }
+  return { issueKey, projectKey: null, statusId: null };
+}
+
+export function transitionsKey(context: TransitionContext) {
+  return context.projectKey && context.statusId
+    ? (['transitions', context.projectKey, context.statusId] as const)
+    : (['transitions', 'issue', context.issueKey] as const);
+}
+
+async function fetchTransitions(
+  issueKey: string,
+  fresh: boolean,
+  signal?: AbortSignal,
+): Promise<IssueTransitions> {
+  try {
+    return await api<IssueTransitions>(
+      `/issues/${encodeURIComponent(issueKey)}/transitions${fresh ? '?fresh=1' : ''}`,
+      { signal },
+    );
+  } catch (error) {
+    throw friendly(error);
+  }
+}
+
+export function transitionsQuery(context: TransitionContext) {
   return queryOptions({
-    queryKey: ['transitions', issueKey] as const,
-    queryFn: async ({ signal }): Promise<IssueTransitions> => {
-      try {
-        return await api<IssueTransitions>(`/issues/${encodeURIComponent(issueKey)}/transitions`, {
-          signal,
-        });
-      } catch (error) {
-        throw friendly(error);
-      }
-    },
-    staleTime: 60_000,
-    gcTime: 5 * 60_000,
+    queryKey: transitionsKey(context),
+    queryFn: ({ signal }) => fetchTransitions(context.issueKey, false, signal),
+    staleTime: TRANSITIONS_CACHE_MS,
+    gcTime: TRANSITIONS_CACHE_MS,
     retry: false,
   });
+}
+
+export async function refreshTransitions(
+  queryClient: QueryClient,
+  context: TransitionContext,
+): Promise<IssueTransitions> {
+  queryClient.removeQueries({ queryKey: transitionsKey(context), exact: true });
+  const fresh = await fetchTransitions(context.issueKey, true);
+  queryClient.setQueryData(
+    transitionsKey({ ...context, statusId: fresh.current_status_id }),
+    fresh,
+  );
+  return fresh;
 }
 
 export async function moveIssue(issueKey: string, transitionId: string): Promise<void> {

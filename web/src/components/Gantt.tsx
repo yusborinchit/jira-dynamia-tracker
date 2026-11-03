@@ -214,7 +214,7 @@ const SegmentBars = memo(function SegmentBars({
               rel="noreferrer"
               className={classes}
               style={style}
-              onClick={openMenu(issue.issue_key)}
+              {...openMenu(issue.issue_key)}
               {...bind}
             />
             {trail}
@@ -289,7 +289,7 @@ export const Gantt = memo(function Gantt({ report, matches, orderByStatus = fals
                   target="_blank"
                   rel="noreferrer"
                   className="truncate text-left font-mono text-[11px] font-semibold hover:underline"
-                  onClick={openMenu(issue.issue_key)}
+                  {...openMenu(issue.issue_key)}
                 >
                   {issue.issue_key}
                 </a>

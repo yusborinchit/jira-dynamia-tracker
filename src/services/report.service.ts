@@ -51,6 +51,7 @@ export interface MonthlyIssue {
   issue_key: string;
   project_key: string;
   summary: string | null;
+  current_status_id: string | null;
   current_status_name: string | null;
   current_category: string | null;
   current_assignee_id: string | null;
@@ -238,6 +239,7 @@ export function buildReport(range: Range, now = Date.now()): Report {
         issue_key: row.issueKey,
         project_key: '',
         summary: null,
+        current_status_id: null,
         current_status_name: null,
         current_category: null,
         current_assignee_id: null,
@@ -304,6 +306,7 @@ export function buildReport(range: Range, now = Date.now()): Report {
     if (!issue) continue;
     issue.project_key = record.projectKey;
     issue.summary = record.summary;
+    issue.current_status_id = record.currentStatusId;
     issue.current_status_name = record.currentStatusName;
     issue.current_category =
       resolver.resolve(record.currentStatusId, record.currentStatusName) ?? UNCATEGORIZED;

@@ -118,7 +118,7 @@ export const IssueTable = memo(function IssueTable({
                 href={jiraIssueUrl(issueKey) ?? undefined}
                 target="_blank"
                 rel="noreferrer"
-                onClick={openMenu(issueKey)}
+                {...openMenu(issueKey)}
                 className="cursor-pointer font-mono text-[11px] whitespace-nowrap hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-500"
               >
                 {issueKey}
@@ -140,7 +140,7 @@ export const IssueTable = memo(function IssueTable({
                 href={jiraIssueUrl(row.original.issue_key) ?? undefined}
                 target="_blank"
                 rel="noreferrer"
-                onClick={openMenu(row.original.issue_key)}
+                {...openMenu(row.original.issue_key)}
                 className="cursor-pointer text-slate-700 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-500"
               >
                 {value}

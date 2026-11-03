@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
+import { RefreshCwIcon } from 'lucide-react';
 import {
   createContext,
   type ReactNode,
@@ -12,13 +13,20 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { toast } from 'sonner';
-
+import { errorMessage } from '@/lib/api';
 import { jiraIssueUrl } from '@/lib/jira';
 import { type MonthlyReport, UNCATEGORIZED } from '@/lib/report';
-import { moveIssue, transitionsQuery } from '@/lib/transitions';
+import {
+  type IssueTransitions,
+  issueContext,
+  moveIssue,
+  refreshTransitions,
+  transitionsQuery,
+} from '@/lib/transitions';
 
 const VIEWPORT_MARGIN = 8;
 const ANCHOR_GAP = 6;
+const PREFETCH_DELAY_MS = 150;
 
 interface MenuState {
   issueKey: string;
@@ -26,7 +34,13 @@ interface MenuState {
   y: number;
 }
 
-type OpenMenu = (issueKey: string) => (event: React.MouseEvent) => void;
+interface IssueMenuHandlers {
+  onClick: (event: React.MouseEvent) => void;
+  onPointerEnter: () => void;
+  onPointerLeave: () => void;
+}
+
+type OpenMenu = (issueKey: string) => IssueMenuHandlers;
 
 const IssueMenuContext = createContext<OpenMenu | null>(null);
 
@@ -49,22 +63,41 @@ export function IssueMenuProvider({
 }) {
   const [menu, setMenu] = useState<MenuState | null>(null);
   const close = useCallback(() => setMenu(null), []);
+  const queryClient = useQueryClient();
+  const prefetchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const cancelPrefetch = useCallback(() => {
+    if (prefetchTimer.current) clearTimeout(prefetchTimer.current);
+    prefetchTimer.current = null;
+  }, []);
+
+  useEffect(() => cancelPrefetch, [cancelPrefetch]);
 
   const open = useCallback<OpenMenu>(
-    (issueKey) => (event) => {
-      if (opensInBrowser(event)) return;
-      event.preventDefault();
-      event.stopPropagation();
+    (issueKey) => ({
+      onClick: (event) => {
+        if (opensInBrowser(event)) return;
+        event.preventDefault();
+        event.stopPropagation();
+        cancelPrefetch();
 
-      const keyboard = event.detail === 0;
-      const rect = event.currentTarget.getBoundingClientRect();
-      setMenu({
-        issueKey,
-        x: keyboard ? rect.left : event.clientX,
-        y: (keyboard ? rect.bottom : event.clientY) + ANCHOR_GAP,
-      });
-    },
-    [],
+        const keyboard = event.detail === 0;
+        const rect = event.currentTarget.getBoundingClientRect();
+        setMenu({
+          issueKey,
+          x: keyboard ? rect.left : event.clientX,
+          y: (keyboard ? rect.bottom : event.clientY) + ANCHOR_GAP,
+        });
+      },
+      onPointerEnter: () => {
+        cancelPrefetch();
+        prefetchTimer.current = setTimeout(() => {
+          void queryClient.prefetchQuery(transitionsQuery(issueContext(queryClient, issueKey)));
+        }, PREFETCH_DELAY_MS);
+      },
+      onPointerLeave: cancelPrefetch,
+    }),
+    [cancelPrefetch, queryClient],
   );
 
   return (
@@ -96,11 +129,19 @@ function IssueMenuPopover({
   const ref = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState({ left: menu.x, top: menu.y });
   const queryClient = useQueryClient();
-  const transitions = useQuery(transitionsQuery(menu.issueKey));
+  const [context] = useState(() => issueContext(queryClient, menu.issueKey));
+  const cached = useQuery(transitionsQuery(context));
+  const refresh = useMutation({
+    mutationFn: () => refreshTransitions(queryClient, context),
+  });
+  const fresh: IssueTransitions | undefined = refresh.data;
+  const data = fresh ?? cached.data;
+  const loading = cached.isPending && !fresh;
+  const loadError = refresh.error ?? (fresh ? null : cached.error);
   const move = useMutation({
     mutationFn: (transitionId: string) => moveIssue(menu.issueKey, transitionId),
     onSuccess: (_result, transitionId) => {
-      const transition = transitions.data?.transitions.find((item) => item.id === transitionId);
+      const transition = data?.transitions.find((item) => item.id === transitionId);
       if (transition) {
         queryClient.setQueriesData<MonthlyReport>({ queryKey: ['report'] }, (report) =>
           report
@@ -110,6 +151,7 @@ function IssueMenuPopover({
                   issue.issue_key === menu.issueKey
                     ? {
                         ...issue,
+                        current_status_id: transition.to_status_id,
                         current_status_name: transition.to_status_name,
                         current_category: transition.category ?? UNCATEGORIZED,
                       }
@@ -120,8 +162,10 @@ function IssueMenuPopover({
         );
         toast.success(`${menu.issueKey} → ${transition.to_status_name}`);
       }
-      queryClient.removeQueries({ queryKey: ['transitions', menu.issueKey] });
       onClose();
+    },
+    onError: () => {
+      refresh.mutate();
     },
   });
   const href = jiraIssueUrl(menu.issueKey);
@@ -175,27 +219,33 @@ function IssueMenuPopover({
       className="fixed z-50 w-60 border border-slate-300 bg-white text-xs text-slate-700 shadow-xl"
       style={position}
     >
-      <div className="border-b border-slate-200 px-3 py-2">
+      <div className="relative border-b border-slate-200 py-2 pr-8 pl-3">
         <div className="font-mono text-[11px] font-semibold text-slate-900">{menu.issueKey}</div>
         <div className="mt-0.5 text-[11px] text-slate-500">
-          {transitions.data?.current_status_name
-            ? `Ahora en ${transitions.data.current_status_name} · mover a`
-            : 'Mover a'}
+          {data?.current_status_name ? `Ahora en ${data.current_status_name} · mover a` : 'Mover a'}
         </div>
+        <button
+          type="button"
+          onClick={() => refresh.mutate()}
+          disabled={refresh.isPending}
+          title="Volver a pedir las columnas a Jira"
+          aria-label="Actualizar columnas desde Jira"
+          className="absolute top-2 right-2 cursor-pointer p-1 text-slate-400 hover:text-slate-700 focus-visible:outline-2 focus-visible:outline-slate-500 disabled:cursor-wait"
+        >
+          <RefreshCwIcon className={`size-3.5 ${refresh.isPending ? 'animate-spin' : ''}`} />
+        </button>
       </div>
 
       <div className="py-1">
-        {transitions.isPending && <p className="px-3 py-1.5 text-slate-400">Cargando columnas…</p>}
+        {loading && <p className="px-3 py-1.5 text-slate-400">Cargando columnas…</p>}
 
-        {transitions.isError && (
-          <p className="px-3 py-1.5 text-red-600">{transitions.error.message}</p>
-        )}
+        {loadError && <p className="px-3 py-1.5 text-red-600">{errorMessage(loadError)}</p>}
 
-        {transitions.data?.transitions.length === 0 && (
+        {data?.transitions.length === 0 && (
           <p className="px-3 py-1.5 text-slate-400">No hay columnas disponibles.</p>
         )}
 
-        {transitions.data?.transitions.map((transition) => {
+        {data?.transitions.map((transition) => {
           const moving = move.isPending && move.variables === transition.id;
           return (
             <button
@@ -214,7 +264,12 @@ function IssueMenuPopover({
           );
         })}
 
-        {move.isError && <p className="px-3 py-1.5 text-red-600">{move.error.message}</p>}
+        {move.isError && (
+          <p className="px-3 py-1.5 text-red-600">
+            {move.error.message}
+            {refresh.isSuccess && ' Actualicé las columnas desde Jira; probá de nuevo.'}
+          </p>
+        )}
       </div>
 
       <div className="border-t border-slate-200 py-1">

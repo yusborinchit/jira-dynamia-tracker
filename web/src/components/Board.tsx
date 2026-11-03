@@ -65,7 +65,7 @@ function BoardCard({
         href={jiraIssueUrl(issue.issue_key) ?? undefined}
         target="_blank"
         rel="noreferrer"
-        onClick={openMenu(issue.issue_key)}
+        {...openMenu(issue.issue_key)}
         className="block cursor-pointer border border-slate-200 bg-white px-2.5 py-2 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-500"
       >
         <div className="flex items-center justify-between gap-2">
