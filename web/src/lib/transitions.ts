@@ -17,7 +17,8 @@ export interface IssueTransitions {
 const ERROR_MESSAGES: Record<string, string> = {
   jira_not_configured: 'Falta configurar JIRA_EMAIL y JIRA_API_TOKEN en el servidor.',
   jira_unauthorized: 'Jira rechazó las credenciales configuradas en el servidor.',
-  issue_not_found: 'Jira no encuentra esta tarea.',
+  issue_not_found:
+    'Jira no encuentra esta tarea o la cuenta configurada no tiene acceso. Revisá JIRA_EMAIL y JIRA_API_TOKEN.',
   jira_unreachable: 'No se pudo conectar con Jira.',
 };
 
