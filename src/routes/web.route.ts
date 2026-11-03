@@ -14,7 +14,11 @@ export async function webRoutes(app: FastifyInstance): Promise<void> {
   await app.register(fastifyStatic, { root: WEB_DIST });
 
   app.setNotFoundHandler((request, reply) => {
-    if (request.method !== 'GET' || request.url.startsWith('/reports')) {
+    if (
+      request.method !== 'GET' ||
+      request.url.startsWith('/reports') ||
+      request.url.startsWith('/issues')
+    ) {
       return reply.code(404).send({ error: 'not_found' });
     }
     return reply.sendFile('index.html');

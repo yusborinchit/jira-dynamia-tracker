@@ -1,14 +1,10 @@
 import { Avatar } from '@/components/Avatar';
+import { useIssueMenu } from '@/components/IssueMenu';
 import { jiraIssueUrl } from '@/lib/jira';
 import type { MonthlyReport } from '@/lib/report';
 
-export function TeamStatus({
-  report,
-  onSelectIssue,
-}: {
-  report: MonthlyReport;
-  onSelectIssue: (issueKey: string) => void;
-}) {
+export function TeamStatus({ report }: { report: MonthlyReport }) {
+  const openMenu = useIssueMenu();
   const activeMembers = report.team_members.filter(
     (member) => member.development_issues.length > 0,
   );
@@ -61,12 +57,7 @@ export function TeamStatus({
                         rel="noreferrer"
                         className="w-full truncate text-left hover:text-slate-950 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-500"
                         title={`${issue.issue_key}${issue.summary ? ` · ${issue.summary}` : ''}`}
-                        onClick={(event) => {
-                          if (!jiraIssueUrl(issue.issue_key)) {
-                            event.preventDefault();
-                            onSelectIssue(issue.issue_key);
-                          }
-                        }}
+                        onClick={openMenu(issue.issue_key)}
                       >
                         <span className="font-mono font-semibold text-slate-700">
                           {issue.issue_key}

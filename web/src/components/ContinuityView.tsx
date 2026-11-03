@@ -139,11 +139,7 @@ function AxisLabels({ report }: { report: MonthlyReport }) {
         <span
           key={tick}
           className={`absolute font-mono text-[9px] text-slate-400 tabular-nums ${
-            index === 0
-              ? ''
-              : index === ticks.length - 1
-                ? '-translate-x-full'
-                : '-translate-x-1/2'
+            index === 0 ? '' : index === ticks.length - 1 ? '-translate-x-full' : '-translate-x-1/2'
           }`}
           style={{ left: `${projectToAxis(tick, axis)}%` }}
         >

@@ -17,6 +17,7 @@ import {
 import { DayView } from '@/components/DayView';
 import { FilterBar } from '@/components/FilterBar';
 import { Gantt } from '@/components/Gantt';
+import { IssueMenuProvider } from '@/components/IssueMenu';
 import { IssueTable } from '@/components/IssueTable';
 import { TeamStatus } from '@/components/TeamStatus';
 import { ThemeToggle } from '@/components/ThemeToggle';
@@ -203,150 +204,153 @@ function Dashboard() {
       : fallbackTarget;
 
   return (
-    <div className="mx-auto flex max-w-[1400px] flex-col gap-6 p-6">
-      <header className="flex flex-col gap-4 border-b-2 border-slate-900 pb-4">
-        <div className="flex items-baseline justify-between gap-4">
-          <h1 className="text-xl font-semibold tracking-tight">Jira Tracker</h1>
-          <div className="flex items-center gap-3">
-            {isFetching && <span className="text-xs text-slate-400">actualizando…</span>}
-            <LiveIndicator status={liveStatus} />
-            <ThemeToggle />
+    <IssueMenuProvider onFilterIssue={selectIssue}>
+      <div className="mx-auto flex max-w-[1400px] flex-col gap-6 p-6">
+        <header className="flex flex-col gap-4 border-b-2 border-slate-900 pb-4">
+          <div className="flex items-baseline justify-between gap-4">
+            <h1 className="text-xl font-semibold tracking-tight">Jira Tracker</h1>
+            <div className="flex items-center gap-3">
+              {isFetching && <span className="text-xs text-slate-400">actualizando…</span>}
+              <LiveIndicator status={liveStatus} />
+              <ThemeToggle />
+            </div>
           </div>
-        </div>
 
-        {data && <TeamStatus report={data} onSelectIssue={selectIssue} />}
+          {data && <TeamStatus report={data} />}
 
-        <FilterBar
-          report={data}
-          date={date}
-          span={span}
-          projects={filters.projects}
-          excludedProjects={filters.excludedProjects}
-          categories={filters.categories}
-          excludedCategories={filters.excludedCategories}
-          assignees={filters.assignees}
-          excludedAssignees={filters.excludedAssignees}
-          search={filters.search}
-          availableProjects={data ? allProjects(data) : []}
-          availableCategories={data ? allCategories(data) : []}
-          availableAssignees={data ? allAssignees(data) : []}
-          categoryTotals={view?.report.totals_by_category}
-          assigneeTotals={view?.report.totals_by_assignee}
-          onExport={
-            view ? () => downloadReportExcel(view.report, deferredFilters, view.matches) : undefined
-          }
-          showCategories={timelineView === 'issues'}
-          onChange={update}
-        />
-      </header>
+          <FilterBar
+            report={data}
+            date={date}
+            span={span}
+            projects={filters.projects}
+            excludedProjects={filters.excludedProjects}
+            categories={filters.categories}
+            excludedCategories={filters.excludedCategories}
+            assignees={filters.assignees}
+            excludedAssignees={filters.excludedAssignees}
+            search={filters.search}
+            availableProjects={data ? allProjects(data) : []}
+            availableCategories={data ? allCategories(data) : []}
+            availableAssignees={data ? allAssignees(data) : []}
+            categoryTotals={view?.report.totals_by_category}
+            assigneeTotals={view?.report.totals_by_assignee}
+            onExport={
+              view
+                ? () => downloadReportExcel(view.report, deferredFilters, view.matches)
+                : undefined
+            }
+            showCategories={timelineView === 'issues'}
+            onChange={update}
+          />
+        </header>
 
-      {isPending && <p className="py-16 text-center text-slate-500">Cargando…</p>}
+        {isPending && <p className="py-16 text-center text-slate-500">Cargando…</p>}
 
-      {isError && (
-        <p className="py-16 text-center text-red-600">
-          No se pudo cargar el reporte: {(error as Error).message}
-        </p>
-      )}
+        {isError && (
+          <p className="py-16 text-center text-red-600">
+            No se pudo cargar el reporte: {(error as Error).message}
+          </p>
+        )}
 
-      {data && view && (
-        <>
-          {view.report.issues.length === 0 ? (
-            <p className="py-16 text-center text-slate-500">
-              No hay actividad registrada en este período.
-            </p>
-          ) : (
-            <>
-              <section>
-                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                  <h2 className="text-sm font-semibold tracking-tight">
-                    {timelineView === 'continuity'
-                      ? 'Continuidad del trabajo'
-                      : TIMELINE_TITLE[span]}
-                  </h2>
-                  <div className="flex items-center gap-2">
-                    <fieldset
-                      className="inline-flex rounded-none border border-slate-300 p-0.5"
-                      aria-label="Vista de cronología"
-                    >
-                      {(
-                        [
-                          ['issues', 'Por issue'],
-                          ['continuity', 'Continuidad'],
-                        ] as const
-                      ).map(([value, label]) => (
-                        <button
-                          key={value}
-                          type="button"
-                          onClick={() => update({ view: value })}
-                          className={`rounded-none px-2.5 py-1 text-xs transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-500 ${
-                            timelineView === value
-                              ? 'bg-slate-800 text-white'
-                              : 'text-slate-600 hover:bg-slate-100'
-                          }`}
-                        >
-                          {label}
-                        </button>
-                      ))}
-                    </fieldset>
-                    {timelineView === 'issues' && span === 'month' && (
-                      <label className="flex items-center gap-1.5 text-xs text-slate-600">
-                        Ordenar
-                        <select
-                          value={issueOrder}
-                          onChange={(event) =>
-                            update({ order: event.target.value as 'default' | 'current_status' })
-                          }
-                          className="border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-500"
-                        >
-                          <option value="default">Orden original</option>
-                          <option value="current_status">Estado actual</option>
-                        </select>
-                      </label>
-                    )}
+        {data && view && (
+          <>
+            {view.report.issues.length === 0 ? (
+              <p className="py-16 text-center text-slate-500">
+                No hay actividad registrada en este período.
+              </p>
+            ) : (
+              <>
+                <section>
+                  <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                    <h2 className="text-sm font-semibold tracking-tight">
+                      {timelineView === 'continuity'
+                        ? 'Continuidad del trabajo'
+                        : TIMELINE_TITLE[span]}
+                    </h2>
+                    <div className="flex items-center gap-2">
+                      <fieldset
+                        className="inline-flex rounded-none border border-slate-300 p-0.5"
+                        aria-label="Vista de cronología"
+                      >
+                        {(
+                          [
+                            ['issues', 'Por issue'],
+                            ['continuity', 'Continuidad'],
+                          ] as const
+                        ).map(([value, label]) => (
+                          <button
+                            key={value}
+                            type="button"
+                            onClick={() => update({ view: value })}
+                            className={`rounded-none px-2.5 py-1 text-xs transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-500 ${
+                              timelineView === value
+                                ? 'bg-slate-800 text-white'
+                                : 'text-slate-600 hover:bg-slate-100'
+                            }`}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </fieldset>
+                      {timelineView === 'issues' && span === 'month' && (
+                        <label className="flex items-center gap-1.5 text-xs text-slate-600">
+                          Ordenar
+                          <select
+                            value={issueOrder}
+                            onChange={(event) =>
+                              update({ order: event.target.value as 'default' | 'current_status' })
+                            }
+                            className="border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-500"
+                          >
+                            <option value="default">Orden original</option>
+                            <option value="current_status">Estado actual</option>
+                          </select>
+                        </label>
+                      )}
+                    </div>
                   </div>
-                </div>
-                {timelineView === 'issues' && <TimelineLegend report={data} span={span} />}
-                {view.matchedIssues === 0 && (
-                  <p className="pb-2 text-xs text-slate-500">
-                    {timelineView === 'continuity'
-                      ? 'Ningún issue coincide con los filtros; no hay continuidad para mostrar.'
-                      : 'Ningún issue coincide con el filtro; se muestra todo atenuado.'}
-                  </p>
-                )}
-                {timelineView === 'continuity' && focusTarget ? (
-                  <ContinuityView
-                    report={view.report}
-                    target={focusTarget}
-                    matches={view.matches}
-                    assignees={deferredFilters.assignees}
-                    onTargetChange={changeFocus}
-                  />
-                ) : span === 'day' && timelineReport ? (
-                  <DayView report={timelineReport} matches={highlight} />
-                ) : timelineReport ? (
-                  <Gantt
-                    report={timelineReport}
-                    matches={highlight}
-                    onSelectIssue={selectIssue}
-                    orderByStatus={issueOrder === 'current_status'}
-                  />
-                ) : null}
-              </section>
+                  {timelineView === 'issues' && <TimelineLegend report={data} span={span} />}
+                  {view.matchedIssues === 0 && (
+                    <p className="pb-2 text-xs text-slate-500">
+                      {timelineView === 'continuity'
+                        ? 'Ningún issue coincide con los filtros; no hay continuidad para mostrar.'
+                        : 'Ningún issue coincide con el filtro; se muestra todo atenuado.'}
+                    </p>
+                  )}
+                  {timelineView === 'continuity' && focusTarget ? (
+                    <ContinuityView
+                      report={view.report}
+                      target={focusTarget}
+                      matches={view.matches}
+                      assignees={deferredFilters.assignees}
+                      onTargetChange={changeFocus}
+                    />
+                  ) : span === 'day' && timelineReport ? (
+                    <DayView report={timelineReport} matches={highlight} />
+                  ) : timelineReport ? (
+                    <Gantt
+                      report={timelineReport}
+                      matches={highlight}
+                      orderByStatus={issueOrder === 'current_status'}
+                    />
+                  ) : null}
+                </section>
 
-              <section>
-                <h2 className="mb-2 text-sm font-semibold tracking-tight">Detalle por issue</h2>
-                {timelineReport && <IssueTable report={timelineReport} matches={highlight} />}
-              </section>
-            </>
-          )}
+                <section>
+                  <h2 className="mb-2 text-sm font-semibold tracking-tight">Detalle por issue</h2>
+                  {timelineReport && <IssueTable report={timelineReport} matches={highlight} />}
+                </section>
+              </>
+            )}
 
-          <footer className="border-t border-slate-200 pt-3 text-[11px] text-slate-400">
-            Solo se cuenta el tiempo dentro del horario laboral: lunes a viernes,{' '}
-            {data.work_schedule.shifts.join(' y ')} ({data.work_schedule.timezone}).
-          </footer>
-        </>
-      )}
-    </div>
+            <footer className="border-t border-slate-200 pt-3 text-[11px] text-slate-400">
+              Solo se cuenta el tiempo dentro del horario laboral: lunes a viernes,{' '}
+              {data.work_schedule.shifts.join(' y ')} ({data.work_schedule.timezone}).
+            </footer>
+          </>
+        )}
+      </div>
+    </IssueMenuProvider>
   );
 }
 

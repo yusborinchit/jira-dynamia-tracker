@@ -6,6 +6,7 @@ import { env } from '@/env';
 import { eventRoutes } from '@/routes/events.route';
 import { healthRoutes } from '@/routes/health.route';
 import { reportRoutes } from '@/routes/report.route';
+import { transitionRoutes } from '@/routes/transition.route';
 import { webRoutes } from '@/routes/web.route';
 import { webhookRoutes } from '@/routes/webhook.route';
 
@@ -19,6 +20,7 @@ export function buildServer() {
   app.register(webhookRoutes);
   app.register(reportRoutes);
   app.register(eventRoutes);
+  app.register(transitionRoutes);
   app.register(webRoutes);
 
   return app;

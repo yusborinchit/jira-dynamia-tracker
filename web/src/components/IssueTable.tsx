@@ -9,6 +9,7 @@ import {
 import { memo, useMemo, useState } from 'react';
 
 import { Avatar } from '@/components/Avatar';
+import { useIssueMenu } from '@/components/IssueMenu';
 import type { MatchFn } from '@/lib/filters';
 import { jiraIssueUrl } from '@/lib/jira';
 import {
@@ -91,6 +92,7 @@ export const IssueTable = memo(function IssueTable({
   report: MonthlyReport;
   matches?: MatchFn;
 }) {
+  const openMenu = useIssueMenu();
   const [sorting, setSorting] = useState<SortingState>([{ id: 'current_category', desc: false }]);
 
   const columns = useMemo(
@@ -100,18 +102,16 @@ export const IssueTable = memo(function IssueTable({
           header: 'Issue',
           cell: ({ getValue }) => {
             const issueKey = getValue();
-            const href = jiraIssueUrl(issueKey);
-            return href ? (
+            return (
               <a
-                href={href}
+                href={jiraIssueUrl(issueKey) ?? undefined}
                 target="_blank"
                 rel="noreferrer"
-                className="font-mono text-[11px] whitespace-nowrap hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-500"
+                onClick={openMenu(issueKey)}
+                className="cursor-pointer font-mono text-[11px] whitespace-nowrap hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-500"
               >
                 {issueKey}
               </a>
-            ) : (
-              <span className="font-mono text-[11px] whitespace-nowrap">{issueKey}</span>
             );
           },
         }),
@@ -124,20 +124,16 @@ export const IssueTable = memo(function IssueTable({
           header: 'Resumen',
           cell: ({ row, getValue }) => {
             const value = getValue();
-            const href = jiraIssueUrl(row.original.issue_key);
             return value ? (
-              href ? (
-                <a
-                  href={href}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-slate-700 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-500"
-                >
-                  {value}
-                </a>
-              ) : (
-                <span className="text-slate-700">{value}</span>
-              )
+              <a
+                href={jiraIssueUrl(row.original.issue_key) ?? undefined}
+                target="_blank"
+                rel="noreferrer"
+                onClick={openMenu(row.original.issue_key)}
+                className="cursor-pointer text-slate-700 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-500"
+              >
+                {value}
+              </a>
             ) : (
               <span className="text-slate-400">—</span>
             );
@@ -184,7 +180,7 @@ export const IssueTable = memo(function IssueTable({
           ),
         }),
       ]),
-    [report, matches],
+    [report, matches, openMenu],
   );
 
   const table = useTable({

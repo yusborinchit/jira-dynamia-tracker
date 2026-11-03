@@ -1,4 +1,5 @@
 import { memo, useMemo } from 'react';
+import { useIssueMenu } from '@/components/IssueMenu';
 import { SegmentTooltip } from '@/components/SegmentTooltip';
 import { useTooltip } from '@/components/Tooltip';
 import type { MatchFn } from '@/lib/filters';
@@ -184,6 +185,7 @@ export const DayView = memo(function DayView({
   matches?: MatchFn;
 }) {
   const tooltip = useTooltip();
+  const openMenu = useIssueMenu();
   const timezone = report.work_schedule.timezone;
   const dimmed = (block: Block): boolean =>
     matches !== undefined && !matches(block.issueKey, block.category);
@@ -298,7 +300,8 @@ export const DayView = memo(function DayView({
                 href={jiraIssueUrl(block.issueKey) ?? undefined}
                 target="_blank"
                 rel="noreferrer"
-                className="absolute flex items-center overflow-hidden rounded-none px-1.5 text-[10px] leading-none text-white/95"
+                onClick={openMenu(block.issueKey)}
+                className="absolute flex cursor-pointer items-center overflow-hidden rounded-none px-1.5 text-[10px] leading-none text-white/95"
                 style={{
                   opacity: dimmed(block) ? DIMMED_OPACITY : 1,
                   left: `${left}%`,

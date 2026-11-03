@@ -8,6 +8,10 @@ export const env = createEnv({
     PORT: z.coerce.number().int().positive().default(3000),
     DATABASE_PATH: z.string().default('./data/jira-tracker.sqlite'),
     JIRA_WEBHOOK_SECRET: z.string().min(16),
+    JIRA_BASE_URL: z.url().optional(),
+    VITE_JIRA_BASE_URL: z.url().optional(),
+    JIRA_EMAIL: z.string().optional(),
+    JIRA_API_TOKEN: z.string().optional(),
     LOG_WEBHOOK_BODY: z
       .enum(['true', 'false'])
       .default('true')

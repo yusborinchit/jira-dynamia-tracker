@@ -3,8 +3,8 @@
 Receives Jira webhooks and records how long each issue spends in each status, then builds a
 monthly summary: time in development, in QA, waiting on the client.
 
-It never calls the Jira API — everything is built from webhooks, so the system only knows what
-happened since it was installed.
+History is built only from webhooks, so the system only knows what happened since it was
+installed. The only call to the Jira API is moving a task from the dashboard (see below).
 
 ## Stack
 
@@ -30,8 +30,22 @@ build/server:
 VITE_JIRA_BASE_URL=https://tu-equipo.atlassian.net
 ```
 
-The task key, its summary, timeline bars, day-view blocks, and current-team task links then open
-`/browse/<issue-key>` in a new tab.
+Clicking a task (its key or summary in the table, a timeline bar, a day-view block, or a
+current-team link) opens a small menu with the columns Jira allows it to move to, plus "Abrir en
+Jira" and "Filtrar por esta tarea". Ctrl/Cmd-click or middle-click still opens Jira directly.
+
+Moving a task needs a Jira account on the server, and every move is made as that account:
+
+```bash
+JIRA_EMAIL=you@example.com
+JIRA_API_TOKEN=...            # https://id.atlassian.com/manage-profile/security/api-tokens
+JIRA_BASE_URL=https://tu-equipo.atlassian.net   # optional, defaults to VITE_JIRA_BASE_URL
+```
+
+The server asks Jira for the available transitions (`GET /issues/:key/transitions`) and runs the
+chosen one (`POST /issues/:key/transitions`). It does not write to the database: Jira sends the
+usual webhook, which records the change and refreshes the dashboard over SSE. There is no login,
+so anyone who can open the dashboard can move tasks.
 
 In production a single process serves both: `pnpm build` builds the web bundle and the server, and
 Fastify serves `web/dist` at `/`. Without a web build the server still runs — it logs

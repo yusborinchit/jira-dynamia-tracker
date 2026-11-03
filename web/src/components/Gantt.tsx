@@ -1,4 +1,5 @@
 import { Fragment, memo, type PointerEvent, type ReactNode, useMemo, useRef } from 'react';
+import { useIssueMenu } from '@/components/IssueMenu';
 import { SegmentTooltip } from '@/components/SegmentTooltip';
 import { useTooltip } from '@/components/Tooltip';
 import {
@@ -147,7 +148,6 @@ const SegmentBars = memo(function SegmentBars({
   axis,
   color,
   dimmed,
-  onSelectIssue,
 }: {
   report: MonthlyReport;
   issue: Issue;
@@ -155,9 +155,9 @@ const SegmentBars = memo(function SegmentBars({
   axis: CompressedAxis;
   color: string;
   dimmed: boolean;
-  onSelectIssue?: (issueKey: string) => void;
 }) {
   const tooltip = useTooltip();
+  const openMenu = useIssueMenu();
   const spans = useMemo(
     () => projectIntervals(segment.work_intervals, axis),
     [axis, segment.work_intervals],
@@ -183,12 +183,7 @@ const SegmentBars = memo(function SegmentBars({
   return (
     <>
       {spans.map((span) => {
-        const classes = [
-          'absolute top-1.5 h-4 rounded-none',
-          onSelectIssue ? 'cursor-pointer hover:brightness-110' : '',
-        ]
-          .filter(Boolean)
-          .join(' ');
+        const classes = 'absolute top-1.5 h-4 cursor-pointer rounded-none hover:brightness-110';
 
         const style = {
           opacity: dimmed ? DIMMED_OPACITY : 1,
@@ -213,24 +208,15 @@ const SegmentBars = memo(function SegmentBars({
 
         return (
           <Fragment key={span.left}>
-            {onSelectIssue ? (
-              <a
-                href={jiraIssueUrl(issue.issue_key) ?? undefined}
-                target="_blank"
-                rel="noreferrer"
-                className={classes}
-                style={style}
-                onClick={(event) => {
-                  if (!jiraIssueUrl(issue.issue_key)) {
-                    event.preventDefault();
-                    onSelectIssue(issue.issue_key);
-                  }
-                }}
-                {...bind}
-              />
-            ) : (
-              <div className={classes} style={style} {...bind} />
-            )}
+            <a
+              href={jiraIssueUrl(issue.issue_key) ?? undefined}
+              target="_blank"
+              rel="noreferrer"
+              className={classes}
+              style={style}
+              onClick={openMenu(issue.issue_key)}
+              {...bind}
+            />
             {trail}
           </Fragment>
         );
@@ -242,16 +228,10 @@ const SegmentBars = memo(function SegmentBars({
 interface GanttProps {
   report: MonthlyReport;
   matches?: MatchFn;
-  onSelectIssue?: (issueKey: string) => void;
   orderByStatus?: boolean;
 }
 
-export const Gantt = memo(function Gantt({
-  report,
-  matches,
-  onSelectIssue,
-  orderByStatus = false,
-}: GanttProps) {
+export const Gantt = memo(function Gantt({ report, matches, orderByStatus = false }: GanttProps) {
   const axis = useMemo(() => buildCompressedAxis(report), [report]);
   const issues = useMemo(() => {
     if (!orderByStatus) return report.issues;
@@ -266,6 +246,7 @@ export const Gantt = memo(function Gantt({
       return a.issue_key.localeCompare(b.issue_key);
     });
   }, [orderByStatus, report.issues]);
+  const openMenu = useIssueMenu();
   const generatedAt = Date.parse(report.generated_at);
   const showNow = isOnAxis(generatedAt, axis);
   const nowPct = projectToAxis(generatedAt, axis);
@@ -308,12 +289,7 @@ export const Gantt = memo(function Gantt({
                   target="_blank"
                   rel="noreferrer"
                   className="truncate text-left font-mono text-[11px] font-semibold hover:underline"
-                  onClick={(event) => {
-                    if (!jiraIssueUrl(issue.issue_key)) {
-                      event.preventDefault();
-                      onSelectIssue?.(issue.issue_key);
-                    }
-                  }}
+                  onClick={openMenu(issue.issue_key)}
                 >
                   {issue.issue_key}
                 </a>
@@ -333,7 +309,6 @@ export const Gantt = memo(function Gantt({
                       axis={axis}
                       color={report.category_colors[segment.category] ?? '#ec4899'}
                       dimmed={matches !== undefined && !matches(issue.issue_key, segment.category)}
-                      onSelectIssue={onSelectIssue}
                     />
                   ))}
                   {showNow && (
