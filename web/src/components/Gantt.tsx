@@ -102,6 +102,9 @@ function GanttRows({
 
   return (
     <div className="relative" onPointerMove={handlePointerMove} onPointerLeave={hideCrosshair}>
+      <div className="pointer-events-none absolute top-0 right-16 bottom-0 left-52">
+        <DayGrid axis={axis} />
+      </div>
       {children}
       <div
         ref={plotRef}
@@ -279,7 +282,10 @@ export const Gantt = memo(function Gantt({ report, matches, orderByStatus = fals
 
         <GanttRows axis={axis} timezone={report.work_schedule.timezone}>
           {issues.map((issue: Issue) => (
-            <div key={issue.issue_key} className="flex items-stretch">
+            <div
+              key={issue.issue_key}
+              className="flex items-stretch [contain-intrinsic-size:auto_40px] [content-visibility:auto]"
+            >
               <div
                 className="flex w-52 flex-none flex-col overflow-hidden py-1.5 pr-2.5 transition-opacity"
                 style={{ opacity: matches && !matches(issue.issue_key) ? 0.35 : 1 }}
@@ -298,7 +304,6 @@ export const Gantt = memo(function Gantt({ report, matches, orderByStatus = fals
                 </span>
               </div>
               <div className="relative min-h-7 flex-1 cursor-crosshair border-l border-slate-300">
-                <DayGrid axis={axis} />
                 <div className="absolute inset-0">
                   {issue.segments.map((segment) => (
                     <SegmentBars

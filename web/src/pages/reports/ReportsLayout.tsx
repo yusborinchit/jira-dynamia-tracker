@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { getRouteApi, Outlet, useRouterState } from '@tanstack/react-router';
+import { getRouteApi, Outlet, useNavigate, useRouterState } from '@tanstack/react-router';
 import {
   createContext,
   useCallback,
@@ -67,7 +67,7 @@ function ReportSkeleton() {
 
 export function ReportsLayout() {
   const search = route.useSearch();
-  const navigate = route.useNavigate();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
 
   const date = search.date ?? currentDate();
@@ -134,6 +134,15 @@ export function ReportsLayout() {
     [date, navigate],
   );
 
+  const available = useMemo(
+    () => ({
+      projects: data ? allProjects(data) : [],
+      categories: data ? allCategories(data) : [],
+      assignees: data ? allAssignees(data) : [],
+    }),
+    [data],
+  );
+
   const view = useMemo(
     () => (data ? applyFilters(data, deferredFilters) : undefined),
     [data, deferredFilters],
@@ -183,9 +192,9 @@ export function ReportsLayout() {
           assignees={filters.assignees}
           excludedAssignees={filters.excludedAssignees}
           search={filters.search}
-          availableProjects={data ? allProjects(data) : []}
-          availableCategories={data ? allCategories(data) : []}
-          availableAssignees={data ? allAssignees(data) : []}
+          availableProjects={available.projects}
+          availableCategories={available.categories}
+          availableAssignees={available.assignees}
           categoryTotals={view?.report.totals_by_category}
           assigneeTotals={view?.report.totals_by_assignee}
           loading={isFetching}
